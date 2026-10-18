@@ -29,7 +29,7 @@ type Msg = { from: "eu" | "ele"; text: string };
 const NAMES_F = ["Ana", "Julia", "Bia", "Luna", "Carol", "Mel"];
 const NAMES_M = ["Lucas", "Pedro", "Rafa", "Theo", "Gabriel", "Leo"];
 const COUNTRIES = ["🇧🇷 Brasil", "🇵🇹 Portugal", "🇦🇷 Argentina", "🇺🇸 EUA", "🇲🇽 México"];
-const SLIDES = [
+const SLIDES: { t: string; s: string }[] = [
   { t: "Fale com alguém novo.", s: "conversas por voz, anônimas e na hora" },
   { t: "Sem fotos, só vozes.", s: "seja você mesmo sem se preocupar" },
   { t: "Escolha quem você ouve.", s: "uma preferência e encontre alguém disponível" },
@@ -39,7 +39,7 @@ function load<T>(k: string, d: T): T {
   try { return JSON.parse(localStorage.getItem(k) || "") as T; } catch { return d; }
 }
 function save(k: string, v: unknown) { localStorage.setItem(k, JSON.stringify(v)); }
-const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)]!;
 const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
 function App() {
@@ -72,7 +72,7 @@ function App() {
       const g = gender === "Todos" ? pick(["F", "M"]) : gender === "Mulheres" ? "F" : "M";
       setPartner({
         id: crypto.randomUUID(), name: pick(g === "F" ? NAMES_F : NAMES_M), gender: g,
-        country: mode === "Brasil" ? COUNTRIES[0] : pick(COUNTRIES),
+        country: mode === "Brasil" ? COUNTRIES[0]! : pick(COUNTRIES),
       });
       setSecs(0); setStage("chamada");
     }, 2500 + Math.random() * 3000);
@@ -171,8 +171,8 @@ function App() {
         <>
           <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
             <img src={bunny} alt="Coelhinho" width={816} height={816} className="h-36 w-36 object-contain" />
-            <h1 className="mt-4 text-4xl font-extrabold">{SLIDES[slide].t}</h1>
-            <p className="mt-2 text-lg text-muted-foreground">{SLIDES[slide].s}</p>
+            <h1 className="mt-4 text-4xl font-extrabold">{SLIDES[slide]!.t}</h1>
+            <p className="mt-2 text-lg text-muted-foreground">{SLIDES[slide]!.s}</p>
             <div className="mt-4 flex gap-2">
               {SLIDES.map((_, i) => <span key={i} className={`h-2 rounded-full ${i === slide ? "w-8 bg-primary" : "w-2 bg-secondary"}`} />)}
             </div>
