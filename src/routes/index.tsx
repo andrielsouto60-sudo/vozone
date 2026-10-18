@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
+import { search, connectCall, listenInbox, sendDM, type Me } from "@/lib/voice";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -26,9 +27,6 @@ type Person = { id: string; name: string; gender: string; country: string };
 type Call = Person & { date: number; secs: number };
 type Msg = { from: "eu" | "ele"; text: string };
 
-const NAMES_F = ["Ana", "Julia", "Bia", "Luna", "Carol", "Mel"];
-const NAMES_M = ["Lucas", "Pedro", "Rafa", "Theo", "Gabriel", "Leo"];
-const COUNTRIES = ["🇧🇷 Brasil", "🇵🇹 Portugal", "🇦🇷 Argentina", "🇺🇸 EUA", "🇲🇽 México"];
 const SLIDES: { t: string; s: string }[] = [
   { t: "Fale com alguém novo.", s: "conversas por voz, anônimas e na hora" },
   { t: "Sem fotos, só vozes.", s: "seja você mesmo sem se preocupar" },
@@ -39,7 +37,6 @@ function load<T>(k: string, d: T): T {
   try { return JSON.parse(localStorage.getItem(k) || "") as T; } catch { return d; }
 }
 function save(k: string, v: unknown) { localStorage.setItem(k, JSON.stringify(v)); }
-const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)]!;
 const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
 function App() {
@@ -57,27 +54,35 @@ function App() {
   const [chats, setChats] = useState<Record<string, Msg[]>>({});
   const [openChat, setOpenChat] = useState<Person | null>(null);
   const stream = useRef<MediaStream | null>(null);
+  const audioEl = useRef<HTMLAudioElement | null>(null);
+  const endCall = useRef<(() => void) | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setHistory(load("vz_hist", [])); setFriends(load("vz_friends", [])); setChats(load("vz_chats", {}));
+    setMe(load<Me | null>("vz_me", null)); setReady(true);
   }, []);
+  useEffect(() => {
+    if (!me) return;
+    return listenInbox(me.id, (from, text) => {
+      setFriends((fs) => { if (fs.some((f) => f.id === from.id)) return fs; const n = [from, ...fs]; save("vz_friends", n); return n; });
+      setChats((prev) => { const n = { ...prev, [from.id]: [...(prev[from.id] || []), { from: "ele" as const, text }] }; save("vz_chats", n); return n; });
+    });
+  }, [me]);
   useEffect(() => { const i = setInterval(() => setSlide((s) => (s + 1) % 3), 4000); return () => clearInterval(i); }, []);
   useEffect(() => {
     if (stage !== "chamada") return;
     const i = setInterval(() => setSecs((s) => s + 1), 1000); return () => clearInterval(i);
   }, [stage]);
   useEffect(() => {
-    if (stage !== "busca") return;
-    const t = setTimeout(() => {
-      const g = gender === "Todos" ? pick(["F", "M"]) : gender === "Mulheres" ? "F" : "M";
-      setPartner({
-        id: crypto.randomUUID(), name: pick(g === "F" ? NAMES_F : NAMES_M), gender: g,
-        country: mode === "Brasil" ? COUNTRIES[0]! : pick(COUNTRIES),
-      });
-      setSecs(0); setStage("chamada");
-    }, 2500 + Math.random() * 3000);
-    return () => clearTimeout(t);
-  }, [stage, gender, mode]);
+    if (stage !== "busca" || !me) return;
+    const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌎 Mundo";
+    return search(me, gender, country, (room, peer, caller) => {
+      setPartner(peer); setSecs(0); setStage("chamada");
+      endCall.current = connectCall(room, caller, stream.current, (audioEl.current ??= new Audio()), () => hangupRef.current());
+    });
+  }, [stage, gender, mode, me]);
 
   const start = async () => {
     try { stream.current = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { /* sem mic */ }
@@ -87,8 +92,10 @@ function App() {
   const cancel = () => { stopMic(); setStage("home"); };
   const hangup = () => {
     if (partner) { const h = [{ ...partner, date: Date.now(), secs }, ...history].slice(0, 50); setHistory(h); save("vz_hist", h); }
+    endCall.current?.(); endCall.current = null;
     stopMic(); setMuted(false); setStage("home");
   };
+  const hangupRef = useRef(hangup); hangupRef.current = hangup;
   const toggleMute = () => { stream.current?.getAudioTracks().forEach((t) => (t.enabled = muted)); setMuted(!muted); };
   const addFriend = (p: Person) => {
     if (friends.some((f) => f.id === p.id)) return;
@@ -97,13 +104,11 @@ function App() {
   const sendMsg = (p: Person, text: string) => {
     const c = { ...chats, [p.id]: [...(chats[p.id] || []), { from: "eu" as const, text }] };
     setChats(c); save("vz_chats", c);
-    setTimeout(() => {
-      setChats((prev) => {
-        const n = { ...prev, [p.id]: [...(prev[p.id] || []), { from: "ele" as const, text: pick(["Haha verdade!", "Que legal 😄", "Bora conversar de novo?", "Oi! Tudo bem?"]) }] };
-        save("vz_chats", n); return n;
-      });
-    }, 1500);
+    if (me) sendDM(p.id, { id: me.id, name: me.name, gender: me.gender, country: "" }, text);
   };
+
+  if (!ready) return <Screen><span /></Screen>;
+  if (!me) return <Onboard onDone={(m) => { setMe(m); save("vz_me", m); }} />;
 
   if (stage === "busca") return (
     <Screen>
@@ -132,7 +137,7 @@ function App() {
             <img src={partner.gender === "F" ? bunny : ghost} alt="" width={816} height={816} className="h-36 w-36 object-contain" />
           </div>
           <h1 className="text-4xl font-extrabold">{partner.name}</h1>
-          <p className="text-muted-foreground">{partner.country}</p>
+          <p className="text-muted-foreground">{partner.country || "Conectando áudio..."}</p>
           <p className="text-2xl font-bold text-primary-glow">{fmt(secs)}</p>
           <button onClick={() => addFriend(partner)} disabled={isFriend}
             className="mt-2 flex items-center gap-2 rounded-full bg-secondary px-5 py-2 font-semibold">
@@ -280,6 +285,33 @@ function ChatView({ person, msgs, onBack, onSend }: { person: Person; msgs: Msg[
           className="flex-1 rounded-full bg-card px-5 py-3 outline-none" />
         <button aria-label="Enviar" className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground"><Send size={20} /></button>
       </form>
+    </Screen>
+  );
+}
+
+function Onboard({ onDone }: { onDone: (m: Me) => void }) {
+  const [name, setName] = useState("");
+  const [g, setG] = useState<"F" | "M" | null>(null);
+  return (
+    <Screen>
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
+        <img src={bunny} alt="" width={816} height={816} className="h-32 w-32 object-contain" />
+        <h1 className="text-3xl font-extrabold">Bem-vindo ao Vozone</h1>
+        <input value={name} onChange={(e) => setName(e.target.value.slice(0, 20))} placeholder="Seu apelido"
+          className="w-full rounded-full bg-card px-5 py-4 text-center text-lg outline-none" />
+        <div className="grid w-full grid-cols-2 gap-3">
+          {(["F", "M"] as const).map((x) => (
+            <button key={x} onClick={() => setG(x)} className={`rounded-full py-4 text-lg font-bold ${g === x ? "bg-primary text-primary-foreground" : "bg-card"}`}>
+              {x === "F" ? "Sou mulher" : "Sou homem"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="p-5">
+        <button disabled={!name.trim() || !g} onClick={() => onDone({ id: crypto.randomUUID(), name: name.trim(), gender: g! })}
+          className="w-full rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground disabled:opacity-40">Entrar</button>
+        <p className="mt-3 text-center text-sm text-muted-foreground">Ao entrar você confirma ter 18 anos ou mais.</p>
+      </div>
     </Screen>
   );
 }
