@@ -54,7 +54,7 @@ function App() {
   const [chats, setChats] = useState<Record<string, Msg[]>>({});
   const [openChat, setOpenChat] = useState<Person | null>(null);
   const stream = useRef<MediaStream | null>(null);
-  const audioEl = useRef<HTMLAudioElement>(null);
+  const audioEl = useRef<HTMLAudioElement | null>(null);
   const endCall = useRef<(() => void) | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [ready, setReady] = useState(false);
@@ -80,7 +80,7 @@ function App() {
     const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌎 Mundo";
     return search(me, gender, country, (room, peer, caller) => {
       setPartner(peer); setSecs(0); setStage("chamada");
-      endCall.current = connectCall(room, caller, stream.current, audioEl.current!, () => hangupRef.current());
+      endCall.current = connectCall(room, caller, stream.current, (audioEl.current ??= new Audio()), () => hangupRef.current());
     });
   }, [stage, gender, mode, me]);
 
@@ -132,7 +132,6 @@ function App() {
     const isFriend = friends.some((f) => f.id === partner.id);
     return (
       <Screen>
-        <audio ref={audioEl} autoPlay />
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
           <div className="flex h-40 w-40 items-center justify-center rounded-full bg-accent">
             <img src={partner.gender === "F" ? bunny : ghost} alt="" width={816} height={816} className="h-36 w-36 object-contain" />
