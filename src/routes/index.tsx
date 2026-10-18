@@ -21,7 +21,7 @@ export const Route = createFileRoute("/")({
 
 type Tab = "voz" | "msg" | "hist";
 type Gender = "Todos" | "Mulheres" | "Homens";
-type Mode = "Equilibrado" | "Brasil" | "Mundo";
+type Mode = "Mundo" | "Brasil";
 type Stage = "home" | "busca" | "chamada";
 type Person = { id: string; name: string; gender: string; country: string };
 type Call = Person & { date: number; secs: number };
@@ -43,7 +43,7 @@ function App() {
   const [tab, setTab] = useState<Tab>("voz");
   const [stage, setStage] = useState<Stage>("home");
   const [gender, setGender] = useState<Gender>("Todos");
-  const [mode, setMode] = useState<Mode>("Equilibrado");
+  const [mode, setMode] = useState<Mode>("Mundo");
   const [menu, setMenu] = useState<"g" | "m" | null>(null);
   const [slide, setSlide] = useState(2);
   const [partner, setPartner] = useState<Person | null>(null);
@@ -77,7 +77,7 @@ function App() {
   }, [stage]);
   useEffect(() => {
     if (stage !== "busca" || !me) return;
-    const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌎 Mundo";
+    const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌏 Mundo";
     return search(me, gender, country, (room, peer, caller) => {
       setPartner(peer); setSecs(0); setStage("chamada");
       endCall.current = connectCall(room, caller, stream.current, (audioEl.current ??= new Audio()), () => hangupRef.current());
@@ -185,13 +185,13 @@ function App() {
           <div className="space-y-4 px-5 pb-4">
             <div className="relative grid grid-cols-2 gap-3">
               <Pill onClick={() => setMenu(menu === "g" ? null : "g")} label={gender === "Todos" ? "Gênero" : gender} icon="⚥" />
-              <Pill onClick={() => setMenu(menu === "m" ? null : "m")} label={mode} icon="🌎" />
+              <Pill onClick={() => setMenu(menu === "m" ? null : "m")} label={mode} icon={mode === "Brasil" ? "🇧🇷" : "🌏"} />
               {menu && (
                 <div className="absolute bottom-full left-0 right-0 mb-2 rounded-3xl bg-card p-2">
-                  {(menu === "g" ? ["Todos", "Mulheres", "Homens"] : ["Equilibrado", "Brasil", "Mundo"]).map((o) => (
+                  {(menu === "g" ? ["Todos", "Mulheres", "Homens"] : ["Mundo", "Brasil"]).map((o) => (
                     <button key={o} onClick={() => { menu === "g" ? setGender(o as Gender) : setMode(o as Mode); setMenu(null); }}
                       className="flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left font-semibold hover:bg-secondary">
-                      {o}{(menu === "g" ? gender : mode) === o && <Check size={18} className="text-primary" />}
+                      {menu === "m" && (o === "Brasil" ? "🇧🇷 " : "🌏 ")}{o}{(menu === "g" ? gender : mode) === o && <Check size={18} className="text-primary" />}
                     </button>
                   ))}
                 </div>
