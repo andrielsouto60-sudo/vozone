@@ -3,15 +3,18 @@ import { useEffect, useRef, useState } from "react";
 import {
   Phone, MessageCircle, History, UserPlus, Bell, ChevronUp, Mic, MicOff, PhoneOff, Send, ArrowLeft, Check,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
-import { search, connectCall, listenInbox, sendDM, type Me } from "@/lib/voice";
+import { search, connectCall, listenInbox, sendDM, type Me, type CallStatus } from "@/lib/voice";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Vozone — Bate-papo por voz aleatório" },
       { name: "description", content: "Converse por voz com pessoas aleatórias. Escolha quem você ouve." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { property: "og:title", content: "Vozone — Bate-papo por voz aleatório" },
       { property: "og:description", content: "Converse por voz com pessoas aleatórias." },
     ],
@@ -58,6 +61,23 @@ function App() {
   const endCall = useRef<(() => void) | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [ready, setReady] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState("");
+  const [callStatus, setCallStatus] = useState<CallStatus>("connecting");
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const startingRef = useRef(false);
+  const alive = useRef(true);
+  const secsRef = useRef(0);
+  secsRef.current = secs;
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      endCall.current?.();
+      stream.current?.getTracks().forEach((t) => t.stop());
+      stream.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     setHistory(load("vz_hist", [])); setFriends(load("vz_friends", [])); setChats(load("vz_chats", {}));
@@ -72,28 +92,47 @@ function App() {
   }, [me]);
   useEffect(() => { const i = setInterval(() => setSlide((s) => (s + 1) % 3), 4000); return () => clearInterval(i); }, []);
   useEffect(() => {
-    if (stage !== "chamada") return;
+    if (stage !== "chamada" || callStatus !== "connected") return;
     const i = setInterval(() => setSecs((s) => s + 1), 1000); return () => clearInterval(i);
-  }, [stage]);
+  }, [stage, callStatus]);
   useEffect(() => {
     if (stage !== "busca" || !me) return;
     const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌏 Mundo";
     return search(me, gender, country, (room, peer, caller) => {
-      setPartner(peer); setSecs(0); setStage("chamada");
-      endCall.current = connectCall(room, caller, stream.current, (audioEl.current ??= new Audio()), () => hangupRef.current());
-    });
+      const media = stream.current;
+      if (!media || !media.getAudioTracks().some((track) => track.readyState === "live")) {
+        setError("O microfone foi desconectado. Conecte-o e tente novamente."); cancel(); return;
+      }
+      setPartner(peer); setSecs(0); setCallStatus("connecting"); setPlaybackBlocked(false); setStage("chamada");
+      try {
+        endCall.current = connectCall(room, caller, media, (audioEl.current ??= new Audio()),
+          (message) => { hangupRef.current(); if (message) setError(message); }, setCallStatus, () => setPlaybackBlocked(true));
+      } catch { setError("Não foi possível iniciar o áudio neste navegador."); cancel(); }
+    }, (message) => { setError(message); cancel(); });
   }, [stage, gender, mode, me]);
 
   const start = async () => {
-    try { stream.current = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { /* sem mic */ }
-    setStage("busca");
+    if (startingRef.current) return;
+    startingRef.current = true; setStarting(true); setError("");
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
+      const media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      if (!alive.current) { media.getTracks().forEach((track) => track.stop()); return; }
+      stream.current = media;
+      media.getAudioTracks().forEach((track) => { track.onended = () => { hangupRef.current(); setError("O microfone foi desconectado. Conecte-o e tente novamente."); }; });
+      setMuted(false); setStage("busca");
+    } catch (cause) {
+      if (!alive.current) return;
+      const name = cause instanceof Error ? cause.name : "";
+      setError(name === "NotAllowedError" ? "Permita o acesso ao microfone no navegador para conversar." : name === "NotFoundError" ? "Nenhum microfone foi encontrado. Conecte um microfone e tente novamente." : "Não foi possível acessar o microfone. Verifique se ele está disponível e tente novamente.");
+    } finally { startingRef.current = false; if (alive.current) setStarting(false); }
   };
   const stopMic = () => { stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; };
   const cancel = () => { stopMic(); setStage("home"); };
   const hangup = () => {
-    if (partner) { const h = [{ ...partner, date: Date.now(), secs }, ...history].slice(0, 50); setHistory(h); save("vz_hist", h); }
+    if (partner) { const h = [{ ...partner, date: Date.now(), secs: secsRef.current }, ...history].slice(0, 50); setHistory(h); save("vz_hist", h); }
     endCall.current?.(); endCall.current = null;
-    stopMic(); setMuted(false); setStage("home");
+    stopMic(); setMuted(false); setPlaybackBlocked(false); setPartner(null); setStage("home");
   };
   const hangupRef = useRef(hangup); hangupRef.current = hangup;
   const toggleMute = () => { stream.current?.getAudioTracks().forEach((t) => (t.enabled = muted)); setMuted(!muted); };
@@ -123,7 +162,7 @@ function App() {
         <p className="text-lg text-muted-foreground">Encontrar alguém que esteja acordado neste momento...</p>
       </div>
       <div className="p-5">
-        <button onClick={cancel} className="w-full rounded-full bg-destructive py-4 text-lg font-bold text-destructive-foreground">Cancelar pesquisa</button>
+        <Button variant="ghost" size="lg" onClick={cancel} className="w-full rounded-full bg-destructive py-4 text-lg font-bold text-destructive-foreground">Cancelar pesquisa</Button>
       </div>
     </Screen>
   );
@@ -137,20 +176,24 @@ function App() {
             <img src={partner.gender === "F" ? bunny : ghost} alt="" width={816} height={816} className="h-36 w-36 object-contain" />
           </div>
           <h1 className="text-4xl font-extrabold">{partner.name}</h1>
-          <p className="text-muted-foreground">{partner.country || "Conectando áudio..."}</p>
+          <p className="text-muted-foreground">{partner.country}</p>
+          <p role="status" className="text-sm text-muted-foreground">{callStatus === "connected" ? "Áudio conectado" : callStatus === "reconnecting" ? "Reconectando áudio..." : "Conectando áudio..."}</p>
+          {playbackBlocked && <Button variant="secondary" onClick={async () => {
+            try { await audioEl.current?.play(); setPlaybackBlocked(false); } catch { setPlaybackBlocked(true); }
+          }}>Ativar som</Button>}
           <p className="text-2xl font-bold text-primary-glow">{fmt(secs)}</p>
-          <button onClick={() => addFriend(partner)} disabled={isFriend}
+          <Button variant="ghost" size="lg" onClick={() => addFriend(partner)} disabled={isFriend}
             className="mt-2 flex items-center gap-2 rounded-full bg-secondary px-5 py-2 font-semibold">
             {isFriend ? <><Check size={18} /> Amigo adicionado</> : <><UserPlus size={18} /> Adicionar amigo</>}
-          </button>
+          </Button>
         </div>
         <div className="flex justify-center gap-8 p-8">
-          <button onClick={toggleMute} aria-label="Microfone" className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary">
+          <Button variant="ghost" size="lg" onClick={toggleMute} aria-label={muted ? "Ativar microfone" : "Silenciar microfone"} aria-pressed={muted} className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary">
             {muted ? <MicOff /> : <Mic />}
-          </button>
-          <button onClick={hangup} aria-label="Desligar" className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+          </Button>
+          <Button variant="ghost" size="lg" onClick={hangup} aria-label="Desligar" className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
             <PhoneOff />
-          </button>
+          </Button>
         </div>
       </Screen>
     );
@@ -176,8 +219,8 @@ function App() {
         <>
           <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
             <img src={bunny} alt="Coelhinho" width={816} height={816} className="h-36 w-36 object-contain" />
-            <h1 className="mt-4 text-4xl font-extrabold">{SLIDES[slide]!.t}</h1>
-            <p className="mt-2 text-lg text-muted-foreground">{SLIDES[slide]!.s}</p>
+            <h1 className="mt-4 text-4xl font-extrabold">{(SLIDES[slide] ?? SLIDES[0])?.t}</h1>
+            <p className="mt-2 text-lg text-muted-foreground">{(SLIDES[slide] ?? SLIDES[0])?.s}</p>
             <div className="mt-4 flex gap-2">
               {SLIDES.map((_, i) => <span key={i} className={`h-2 rounded-full ${i === slide ? "w-8 bg-primary" : "w-2 bg-secondary"}`} />)}
             </div>
@@ -189,17 +232,18 @@ function App() {
               {menu && (
                 <div className="absolute bottom-full left-0 right-0 mb-2 rounded-3xl bg-card p-2">
                   {(menu === "g" ? ["Todos", "Mulheres", "Homens"] : ["Mundo", "Brasil"]).map((o) => (
-                    <button key={o} onClick={() => { menu === "g" ? setGender(o as Gender) : setMode(o as Mode); setMenu(null); }}
+                    <Button variant="ghost" size="lg" key={o} onClick={() => { menu === "g" ? setGender(o as Gender) : setMode(o as Mode); setMenu(null); }}
                       className="flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left font-semibold hover:bg-secondary">
                       {menu === "m" && (o === "Brasil" ? "🇧🇷 " : "🌏 ")}{o}{(menu === "g" ? gender : mode) === o && <Check size={18} className="text-primary" />}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
             </div>
-            <button onClick={start} className="flex w-full items-center justify-center gap-3 rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground">
-              <Phone size={22} fill="currentColor" /> Iniciar bate-papo por voz
-            </button>
+            {error && <p role="alert" className="text-center text-sm text-destructive">{error}</p>}
+            <Button variant="ghost" size="lg" disabled={starting} onClick={start} className="flex h-auto w-full whitespace-normal items-center justify-center gap-3 rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground">
+              <Phone size={22} fill="currentColor" /> {starting ? "Aguardando microfone..." : "Iniciar bate-papo por voz"}
+            </Button>
             <p className="text-center text-sm text-muted-foreground">Apenas para maiores de 18 anos. Seja respeitoso.</p>
           </div>
         </>
@@ -210,10 +254,10 @@ function App() {
           {friends.map((f) => {
             const last = chats[f.id]?.at(-1)?.text;
             return (
-              <button key={f.id} onClick={() => setOpenChat(f)} className="flex w-full items-center gap-3 rounded-3xl bg-card p-3 text-left">
+              <Button variant="ghost" size="lg" key={f.id} onClick={() => setOpenChat(f)} className="flex w-full items-center gap-3 rounded-3xl bg-card p-3 text-left">
                 <Avatar g={f.gender} />
                 <div className="min-w-0"><p className="font-bold">{f.name}</p><p className="truncate text-sm text-muted-foreground">{last || f.country}</p></div>
-              </button>
+              </Button>
             );
           })}
         </List>
@@ -233,9 +277,9 @@ function App() {
 
       <nav className="grid grid-cols-3 rounded-t-3xl border-t border-border py-3">
         {([["voz", Phone, "Bate-papo por voz"], ["msg", MessageCircle, "Mensagens"], ["hist", History, "Histórico"]] as const).map(([k, Icon, l]) => (
-          <button key={k} onClick={() => setTab(k)} className={`flex flex-col items-center gap-1 text-sm font-semibold ${tab === k ? "text-foreground" : "text-muted-foreground"}`}>
+          <Button variant="ghost" size="lg" key={k} onClick={() => setTab(k)} className={`flex flex-col items-center gap-1 text-sm font-semibold ${tab === k ? "text-foreground" : "text-muted-foreground"}`}>
             <Icon size={24} />{l}
-          </button>
+          </Button>
         ))}
       </nav>
     </Screen>
@@ -247,9 +291,9 @@ function Screen({ children }: { children: React.ReactNode }) {
 }
 function Pill({ label, icon, onClick }: { label: string; icon: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex items-center justify-center gap-2 rounded-full bg-card py-4 text-lg font-bold">
+    <Button variant="ghost" size="lg" onClick={onClick} className="flex items-center justify-center gap-2 rounded-full bg-card py-4 text-lg font-bold">
       <span>{icon}</span>{label}<ChevronUp size={18} className="text-muted-foreground" />
-    </button>
+    </Button>
   );
 }
 function Avatar({ g }: { g: string }) {
@@ -272,7 +316,7 @@ function ChatView({ person, msgs, onBack, onSend }: { person: Person; msgs: Msg[
   return (
     <Screen>
       <header className="flex items-center gap-3 border-b border-border p-4">
-        <button onClick={onBack} aria-label="Voltar"><ArrowLeft /></button>
+        <Button variant="ghost" size="lg" onClick={onBack} aria-label="Voltar"><ArrowLeft /></Button>
         <Avatar g={person.gender} /><p className="font-bold">{person.name}</p>
       </header>
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
@@ -283,7 +327,7 @@ function ChatView({ person, msgs, onBack, onSend }: { person: Person; msgs: Msg[
       <form onSubmit={(e) => { e.preventDefault(); if (text.trim()) { onSend(text.trim()); setText(""); } }} className="flex gap-2 p-4">
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Escreva uma mensagem..."
           className="flex-1 rounded-full bg-card px-5 py-3 outline-none" />
-        <button aria-label="Enviar" className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground"><Send size={20} /></button>
+        <Button variant="ghost" size="lg" aria-label="Enviar" className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground"><Send size={20} /></Button>
       </form>
     </Screen>
   );
@@ -301,15 +345,15 @@ function Onboard({ onDone }: { onDone: (m: Me) => void }) {
           className="w-full rounded-full bg-card px-5 py-4 text-center text-lg outline-none" />
         <div className="grid w-full grid-cols-2 gap-3">
           {(["F", "M"] as const).map((x) => (
-            <button key={x} onClick={() => setG(x)} className={`rounded-full py-4 text-lg font-bold ${g === x ? "bg-primary text-primary-foreground" : "bg-card"}`}>
+            <Button variant="ghost" size="lg" key={x} onClick={() => setG(x)} className={`rounded-full py-4 text-lg font-bold ${g === x ? "bg-primary text-primary-foreground" : "bg-card"}`}>
               {x === "F" ? "Sou mulher" : "Sou homem"}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
       <div className="p-5">
-        <button disabled={!name.trim() || !g} onClick={() => onDone({ id: crypto.randomUUID(), name: name.trim(), gender: g! })}
-          className="w-full rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground disabled:opacity-40">Entrar</button>
+        <Button variant="ghost" size="lg" disabled={!name.trim() || !g} onClick={() => { if (g && name.trim()) onDone({ id: crypto.randomUUID(), name: name.trim(), gender: g }); }}
+          className="w-full rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground disabled:opacity-40">Entrar</Button>
         <p className="mt-3 text-center text-sm text-muted-foreground">Ao entrar você confirma ter 18 anos ou mais.</p>
       </div>
     </Screen>
