@@ -1,85 +1,167 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export type Me = { id: string; name: string; gender: "F" | "M" };
 export type Peer = { id: string; name: string; gender: string; country: string };
 type Want = "Todos" | "Mulheres" | "Homens";
-
-const ICE = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
+type Candidate = Peer & { want: Want; ts: number };
+export type CallStatus = "connecting" | "connected" | "reconnecting";
+const ICE: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
 const ok = (want: Want, g: string) => want === "Todos" || (want === "Mulheres" ? g === "F" : g === "M");
+const isPeer = (p: unknown): p is Peer => {
+  if (!p || typeof p !== "object") return false;
+  const v = p as Partial<Peer>;
+  return typeof v.id === "string" && typeof v.name === "string" && typeof v.country === "string" && (v.gender === "F" || v.gender === "M");
+};
 
-/** Fila de busca: encontra alguém compatível e devolve sala + parceiro. */
-export function search(me: Me, want: Want, country: string, onMatch: (room: string, peer: Peer, caller: boolean) => void) {
+/** A repeated, acknowledged handshake prevents missing a peer during channel startup. */
+export function search(me: Me, want: Want, country: string, onMatch: (room: string, peer: Peer, caller: boolean) => void, onError: (message: string) => void = () => {}) {
   let done = false;
-  let pending: string | null = null;
-  const ch: RealtimeChannel = supabase.channel("lobby", { config: { presence: { key: me.id } } });
+  let subscribed = false;
+  let pending: { peer: Peer; room: string; caller: boolean; expires: number } | null = null;
+  const ch = supabase.channel("lobby", { config: { presence: { key: me.id }, broadcast: { ack: true } } });
+  const from: Candidate = { ...me, country, want, ts: Date.now() };
+  const send = (event: string, payload: unknown) => ch.send({ type: "broadcast", event, payload });
   const finish = (room: string, peer: Peer, caller: boolean) => {
-    if (done) return; done = true; supabase.removeChannel(ch); onMatch(room, peer, caller);
+    if (done) return;
+    done = true; clearInterval(retry); void supabase.removeChannel(ch); onMatch(room, peer, caller);
   };
-  const tryMatch = () => {
-    if (done || pending) return;
-    const st = ch.presenceState<{ id: string; name: string; gender: string; want: Want; country: string; ts: number }>();
-    const list = Object.values(st).map((a) => a[0]!).filter((p) => p && p.id !== me.id && ok(want, p.gender) && ok(p.want, me.gender));
-    list.sort((a, b) => a.ts - b.ts);
-    const c = list.find((p) => me.id < p.id); // só o menor id convida
-    if (!c) return;
-    pending = c.id;
-    const room = crypto.randomUUID();
-    ch.send({ type: "broadcast", event: "invite", payload: { to: c.id, room, from: { id: me.id, name: me.name, gender: me.gender, country } } });
-    setTimeout(() => { if (!done) { pending = null; tryMatch(); } }, 4000);
+  const tick = () => {
+    if (done || !subscribed) return;
+    if (pending && pending.expires < Date.now()) pending = null;
+    if (!pending) {
+      const peers = Object.values(ch.presenceState<Candidate>()).flat().filter((p) => isPeer(p) && p.id !== me.id && ok(want, p.gender) && ok(p.want, me.gender));
+      peers.sort((a, b) => a.ts - b.ts);
+      const peer = peers.find((p) => me.id < p.id);
+      if (peer) pending = { peer, room: crypto.randomUUID(), caller: true, expires: Date.now() + 10000 };
+    }
+    if (pending) void send(pending.caller ? "invite" : "accept", { to: pending.peer.id, room: pending.room, from });
   };
-  ch.on("presence", { event: "sync" }, tryMatch)
+  const retry = setInterval(tick, 1000);
+  ch.on("presence", { event: "sync" }, tick)
+    .on("presence", { event: "join" }, tick)
     .on("broadcast", { event: "invite" }, ({ payload }) => {
-      if (payload.to !== me.id || done || pending) return;
-      ch.send({ type: "broadcast", event: "accept", payload: { to: payload.from.id, room: payload.room, from: { id: me.id, name: me.name, gender: me.gender, country } } });
-      finish(payload.room, payload.from, false);
+      if (done || payload?.to !== me.id || typeof payload.room !== "string" || !isPeer(payload.from)) return;
+      if (!ok(want, payload.from.gender) || !ok(payload.from.want, me.gender) || payload.from.id >= me.id) return;
+      if (pending && (pending.room !== payload.room || pending.peer.id !== payload.from.id)) return;
+      pending = { peer: payload.from, room: payload.room, caller: false, expires: Date.now() + 10000 }; tick();
     })
-    .on("broadcast", { event: "accept" }, ({ payload }) => {
-      if (payload.to !== me.id || payload.from.id !== pending) return;
-      finish(payload.room, payload.from, true);
+    .on("broadcast", { event: "accept" }, async ({ payload }) => {
+      const match = pending;
+      if (done || !match?.caller || payload?.to !== me.id || payload.room !== match.room || payload.from?.id !== match.peer.id) return;
+      const result = await send("confirm", { to: match.peer.id, room: match.room });
+      if (result === "ok" && !done && pending === match) finish(match.room, match.peer, true);
+    })
+    .on("broadcast", { event: "confirm" }, ({ payload }) => {
+      if (!done && pending && !pending.caller && payload?.to === me.id && payload.room === pending.room) finish(pending.room, pending.peer, false);
     })
     .subscribe((s) => {
-      if (s === "SUBSCRIBED") ch.track({ id: me.id, name: me.name, gender: me.gender, want, country, ts: Date.now() });
+      subscribed = s === "SUBSCRIBED";
+      if (subscribed) void ch.track(from).then(tick);
+      if (!done && (s === "CHANNEL_ERROR" || s === "TIMED_OUT")) { onError("A conexão caiu durante a busca. Tente novamente."); cleanup(); }
     });
-  return () => { done = true; supabase.removeChannel(ch); };
+  const cleanup = () => { done = true; clearInterval(retry); void supabase.removeChannel(ch); };
+  return cleanup;
 }
 
-/** Chamada de voz WebRTC usando a sala como sinalização. */
-export function connectCall(room: string, caller: boolean, stream: MediaStream | null, audio: HTMLAudioElement, onEnd: () => void) {
+/** Repeated readiness, queued ICE and bounded recovery keep audio negotiation reliable. */
+export function connectCall(room: string, caller: boolean, stream: MediaStream, audio: HTMLAudioElement, onEnd: (message?: string) => void, onStatus: (status: CallStatus) => void = () => {}, onPlaybackBlocked: () => void = () => {}) {
   const pc = new RTCPeerConnection(ICE);
-  stream?.getTracks().forEach((t) => pc.addTrack(t, stream));
-  pc.ontrack = (e) => { audio.srcObject = e.streams[0] ?? null; audio.play().catch(() => {}); };
-  const ch = supabase.channel(`room:${room}`);
-  const send = (event: string, payload: unknown) => ch.send({ type: "broadcast", event, payload });
-  pc.onicecandidate = (e) => e.candidate && send("ice", e.candidate.toJSON());
-  pc.onconnectionstatechange = () => { if (["failed", "closed"].includes(pc.connectionState)) close(true); };
+  stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+  const remote = new MediaStream();
   let closed = false;
-  const close = (notify: boolean) => {
-    if (closed) return; closed = true;
-    if (!notify) send("bye", {});
-    pc.close(); setTimeout(() => supabase.removeChannel(ch), 300);
-    if (notify) onEnd();
+  let subscribed = false;
+  let negotiating = false;
+  let answered = false;
+  let recovery: ReturnType<typeof setTimeout> | undefined;
+  const candidates: RTCIceCandidateInit[] = [];
+  const outbound: { event: string; payload: unknown }[] = [];
+  const ch = supabase.channel(`room:${room}`, { config: { broadcast: { ack: true } } });
+  const send = async (event: string, payload: unknown) => {
+    if (closed) return;
+    if (!subscribed) { outbound.push({ event, payload }); return; }
+    if (await ch.send({ type: "broadcast", event, payload }) !== "ok" && !closed) onStatus("reconnecting");
   };
-  const offer = async () => { const o = await pc.createOffer(); await pc.setLocalDescription(o); send("offer", o); };
-  ch.on("broadcast", { event: "ready" }, () => caller && offer())
-    .on("broadcast", { event: "offer" }, async ({ payload }) => {
-      await pc.setRemoteDescription(payload); const a = await pc.createAnswer(); await pc.setLocalDescription(a); send("answer", a);
+  const close = (notify: boolean, message?: string) => {
+    if (closed) return;
+    if (!notify && subscribed) void ch.send({ type: "broadcast", event: "bye", payload: {} }).finally(() => supabase.removeChannel(ch));
+    else void supabase.removeChannel(ch);
+    closed = true; clearInterval(heartbeat); clearTimeout(deadline); clearTimeout(recovery);
+    pc.onconnectionstatechange = null; pc.onicecandidate = null; pc.ontrack = null;
+    pc.close(); audio.pause(); audio.srcObject = null;
+    if (notify) onEnd(message);
+  };
+  const guard = (task: () => Promise<void>) => { if (!closed) void task().catch(() => { if (!closed) close(true, "Não foi possível conectar o áudio. Tente outra chamada."); }); };
+  const flush = async () => {
+    while (!closed && pc.remoteDescription && candidates.length) {
+      const candidate = candidates.shift(); if (candidate) await pc.addIceCandidate(candidate);
+    }
+  };
+  const offer = async (restart = false) => {
+    if (closed || negotiating || (!restart && pc.localDescription)) return;
+    negotiating = true;
+    try { const o = await pc.createOffer({ iceRestart: restart }); if (closed) return; await pc.setLocalDescription(o); await send("offer", o); }
+    finally { negotiating = false; }
+  };
+  pc.ontrack = (e) => {
+    remote.addTrack(e.track); audio.srcObject = e.streams[0] ?? remote;
+    audio.autoplay = true; audio.play().catch(onPlaybackBlocked);
+  };
+  pc.onicecandidate = (e) => { if (e.candidate) void send("ice", e.candidate.toJSON()); };
+  pc.onconnectionstatechange = () => {
+    if (closed) return;
+    if (pc.connectionState === "connected") { clearTimeout(recovery); recovery = undefined; clearTimeout(deadline); onStatus("connected"); }
+    else if (["disconnected", "failed"].includes(pc.connectionState)) {
+      onStatus("reconnecting");
+      if (recovery) return;
+      if (caller && pc.signalingState === "stable") guard(() => offer(true));
+      recovery = setTimeout(() => close(true, "O sinal caiu e não foi possível recuperar a chamada."), 15000);
+    }
+  };
+  const heartbeat = setInterval(() => {
+    if (closed || !subscribed || pc.connectionState === "connected") return;
+    void send("ready", {});
+    if (caller && pc.localDescription && !answered) void send("offer", pc.localDescription.toJSON());
+    if (!caller && pc.localDescription) void send("answer", pc.localDescription.toJSON());
+  }, 1000);
+  const deadline = setTimeout(() => close(true, "O áudio não conectou. Tente novamente; algumas redes precisam de uma conexão de retransmissão."), 30000);
+  onStatus("connecting");
+  ch.on("broadcast", { event: "ready" }, () => { if (caller) guard(() => offer()); })
+    .on("broadcast", { event: "offer" }, ({ payload }) => {
+      if (caller) return;
+      guard(async () => {
+        if (negotiating) return; negotiating = true;
+        try {
+          if (pc.remoteDescription?.sdp === payload.sdp && pc.localDescription) { await send("answer", pc.localDescription.toJSON()); return; }
+          await pc.setRemoteDescription(payload); if (closed) return; await flush();
+          const a = await pc.createAnswer(); if (closed) return; await pc.setLocalDescription(a); await send("answer", a);
+        } finally { negotiating = false; }
+      });
     })
-    .on("broadcast", { event: "answer" }, ({ payload }) => pc.setRemoteDescription(payload))
-    .on("broadcast", { event: "ice" }, ({ payload }) => pc.addIceCandidate(payload).catch(() => {}))
+    .on("broadcast", { event: "answer" }, ({ payload }) => {
+      if (!caller) return;
+      guard(async () => { if (pc.signalingState !== "have-local-offer") return; await pc.setRemoteDescription(payload); answered = true; await flush(); });
+    })
+    .on("broadcast", { event: "ice" }, ({ payload }) => { guard(async () => { candidates.push(payload); await flush(); }); })
     .on("broadcast", { event: "bye" }, () => close(true))
-    .subscribe((s) => { if (s === "SUBSCRIBED" && !caller) send("ready", {}); });
+    .subscribe((s) => {
+      if (closed) return;
+      subscribed = s === "SUBSCRIBED";
+      if (subscribed) { for (const item of outbound.splice(0)) void send(item.event, item.payload); void send("ready", {}); }
+      else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") onStatus("reconnecting");
+    });
   return () => close(false);
 }
 
-/** Mensagens diretas: cada pessoa escuta a própria caixa de entrada. */
 export function listenInbox(myId: string, onMsg: (from: Peer, text: string) => void) {
-  const ch = supabase.channel(`inbox:${myId}`).on("broadcast", { event: "msg" }, ({ payload }) => onMsg(payload.from, payload.text)).subscribe();
-  return () => { supabase.removeChannel(ch); };
+  const ch = supabase.channel(`inbox:${myId}`).on("broadcast", { event: "msg" }, ({ payload }) => {
+    if (isPeer(payload?.from) && typeof payload.text === "string") onMsg(payload.from, payload.text);
+  }).subscribe();
+  return () => { void supabase.removeChannel(ch); };
 }
 export function sendDM(to: string, from: Peer, text: string) {
-  const ch = supabase.channel(`inbox:${to}`);
+  const ch = supabase.channel(`inbox:${to}`, { config: { broadcast: { ack: true } } });
+  const timeout = setTimeout(() => supabase.removeChannel(ch), 10000);
   ch.subscribe((s) => {
-    if (s === "SUBSCRIBED") ch.send({ type: "broadcast", event: "msg", payload: { from, text } }).finally(() => supabase.removeChannel(ch));
+    if (s === "SUBSCRIBED") void ch.send({ type: "broadcast", event: "msg", payload: { from, text } }).finally(() => { clearTimeout(timeout); void supabase.removeChannel(ch); });
   });
 }
