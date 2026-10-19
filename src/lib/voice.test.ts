@@ -34,20 +34,20 @@ describe("voice negotiation", () => {
     expect(ch.send.mock.calls.filter(([v]: any) => v.event === "ready").length).toBe(3); cleanup();
   });
   it("buffers early ICE until the offer has been installed", async () => {
-    const cleanup = connectCall("room", false, stream, audio, vi.fn()); const ch = transport.channels[0]; const pc = FakePC.instances[0];
+    const cleanup = connectCall("room", false, stream, audio, vi.fn()); const ch = transport.channels[0]; const pc = FakePC.instances[0]; if (!pc) throw new Error("Missing peer connection");
     ch.status("SUBSCRIBED"); ch.handlers.ice({payload:{candidate:"candidate"}}); await settle(); expect(pc.addIceCandidate).not.toHaveBeenCalled();
     ch.handlers.offer({payload:{type:"offer",sdp:"offer"}}); await settle();
     expect(pc.addIceCandidate).toHaveBeenCalledWith({candidate:"candidate"}); expect(ch.send).toHaveBeenCalledWith(expect.objectContaining({event:"answer"})); cleanup();
   });
   it("ignores a duplicate answer once negotiation has completed", async () => {
-    const cleanup = connectCall("room", true, stream, audio, vi.fn()); const ch = transport.channels[0]; const pc = FakePC.instances[0];
+    const cleanup = connectCall("room", true, stream, audio, vi.fn()); const ch = transport.channels[0]; const pc = FakePC.instances[0]; if (!pc) throw new Error("Missing peer connection");
     ch.status("SUBSCRIBED"); ch.handlers.ready(); await settle(); ch.handlers.answer({payload:{type:"answer",sdp:"answer"}}); await settle();
     pc.signalingState = "stable"; ch.handlers.answer({payload:{type:"answer",sdp:"answer"}}); await settle();
     expect(pc.setRemoteDescription).toHaveBeenCalledTimes(1); cleanup();
   });
   it("ends a call with a clear error instead of leaving a fake connected screen", async () => {
     const onEnd = vi.fn(); connectCall("room", false, stream, audio, onEnd); await vi.advanceTimersByTimeAsync(30000);
-    expect(onEnd).toHaveBeenCalledTimes(1); expect(onEnd.mock.calls[0][0]).toContain("O áudio não conectou"); expect(FakePC.instances[0].close).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledTimes(1); expect(onEnd.mock.calls[0]?.[0]).toContain("O áudio não conectou"); expect(FakePC.instances[0]?.close).toHaveBeenCalledOnce();
   });
   it("clears readiness and timeouts on hangup", async () => {
     const onEnd = vi.fn(); const cleanup = connectCall("room", false, stream, audio, onEnd); const ch = transport.channels[0]; ch.status("SUBSCRIBED"); await settle(); cleanup(); await settle(); const count = ch.send.mock.calls.length;
