@@ -8,3 +8,7 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep browser voice transport in `src/lib/voice.ts` with acknowledged matchmaking, repeated room readiness, queued ICE, and bounded cleanup; subscriptions can start in either order.
+- Require a live microphone before searching and count call duration only while media is connected; a matched peer is not proof of working audio.
+- TURN relay credentials must be short-lived and supplied by a verified server integration, never a static public client secret; STUN-only connections cannot cover every network.

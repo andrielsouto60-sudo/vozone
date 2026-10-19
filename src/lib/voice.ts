@@ -41,7 +41,7 @@ export function search(me: Me, want: Want, country: string, onMatch: (room: stri
     .on("presence", { event: "join" }, tick)
     .on("broadcast", { event: "invite" }, ({ payload }) => {
       if (done || payload?.to !== me.id || typeof payload.room !== "string" || !isPeer(payload.from)) return;
-      if (!ok(want, payload.from.gender) || !ok(payload.from.want, me.gender) || payload.from.id >= me.id) return;
+      if (!ok(want, payload.from.gender) || !ok((payload.from as Candidate).want, me.gender) || payload.from.id >= me.id) return;
       if (pending && (pending.room !== payload.room || pending.peer.id !== payload.from.id)) return;
       pending = { peer: payload.from, room: payload.room, caller: false, expires: Date.now() + 10000 }; tick();
     })
