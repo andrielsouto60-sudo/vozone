@@ -5,7 +5,18 @@ export type Peer = { id: string; name: string; gender: string; country: string }
 type Want = "Todos" | "Mulheres" | "Homens";
 type Candidate = Peer & { want: Want; ts: number };
 export type CallStatus = "connecting" | "connected" | "reconnecting";
-const ICE: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
+const STUN: RTCIceServer = { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] };
+let relay: RTCIceServer[] = [];
+let relayExpires = 0;
+/** Fetch short-lived relay credentials before a call; failures fall back to STUN only. */
+export async function loadRelay() {
+  if (relay.length && relayExpires > Date.now()) return;
+  try {
+    const { getIceServers } = await import("./turn.functions");
+    const { iceServers } = await getIceServers();
+    relay = iceServers as RTCIceServer[]; relayExpires = Date.now() + 50 * 60 * 1000;
+  } catch { relay = []; }
+}
 const ok = (want: Want, g: string) => want === "Todos" || (want === "Mulheres" ? g === "F" : g === "M");
 const isPeer = (p: unknown): p is Peer => {
   if (!p || typeof p !== "object") return false;
@@ -65,7 +76,7 @@ export function search(me: Me, want: Want, country: string, onMatch: (room: stri
 
 /** Repeated readiness, queued ICE and bounded recovery keep audio negotiation reliable. */
 export function connectCall(room: string, caller: boolean, stream: MediaStream, audio: HTMLAudioElement, onEnd: (message?: string) => void, onStatus: (status: CallStatus) => void = () => {}, onPlaybackBlocked: () => void = () => {}) {
-  const pc = new RTCPeerConnection(ICE);
+  const pc = new RTCPeerConnection({ iceServers: [STUN, ...relay] });
   stream.getTracks().forEach((t) => pc.addTrack(t, stream));
   const remote = new MediaStream();
   let closed = false;
