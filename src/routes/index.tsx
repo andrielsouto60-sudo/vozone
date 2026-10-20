@@ -6,7 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
-import { search, connectCall, listenInbox, sendDM, type Me, type CallStatus } from "@/lib/voice";
+import { search, loadRelay, connectCall, listenInbox, sendDM, type Me, type CallStatus } from "@/lib/voice";
 
 export const Route = createFileRoute("/")({
   head: () => ({
