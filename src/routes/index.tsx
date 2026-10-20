@@ -98,6 +98,7 @@ function App() {
   useEffect(() => {
     if (stage !== "busca" || !me) return;
     const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌏 Mundo";
+    void loadRelay();
     return search(me, gender, country, (room, peer, caller) => {
       const media = stream.current;
       if (!media || !media.getAudioTracks().some((track) => track.readyState === "live")) {
