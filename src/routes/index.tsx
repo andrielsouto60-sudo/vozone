@@ -6,7 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
-import { search, connectCall, listenInbox, sendDM, type Me, type CallStatus } from "@/lib/voice";
+import { search, loadRelay, connectCall, listenInbox, sendDM, type Me, type CallStatus } from "@/lib/voice";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -98,6 +98,7 @@ function App() {
   useEffect(() => {
     if (stage !== "busca" || !me) return;
     const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌏 Mundo";
+    void loadRelay();
     return search(me, gender, country, (room, peer, caller) => {
       const media = stream.current;
       if (!media || !media.getAudioTracks().some((track) => track.readyState === "live")) {
