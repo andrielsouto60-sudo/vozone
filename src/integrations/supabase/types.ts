@@ -14,13 +14,58 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      voice_reports: {
+        Row: {
+          created_at: string
+          details: string
+          id: string
+          reason: string
+          reported_session: string
+          reporter_session: string
+          request_hash: string
+          room_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          details?: string
+          id?: string
+          reason: string
+          reported_session: string
+          reporter_session: string
+          request_hash: string
+          room_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          details?: string
+          id?: string
+          reason?: string
+          reported_session?: string
+          reporter_session?: string
+          request_hash?: string
+          room_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      submit_voice_report: {
+        Args: {
+          p_details: string
+          p_hash: string
+          p_reason: string
+          p_reporter: string
+          p_room: string
+          p_target: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
