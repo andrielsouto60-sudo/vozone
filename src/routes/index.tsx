@@ -1,9 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import {
-  Phone, MessageCircle, History, UserPlus, Bell, ChevronUp, Mic, MicOff, PhoneOff, Send, ArrowLeft, Check,
+  Phone, MessageCircle, History, UserPlus, Bell, ChevronUp, Mic, MicOff, PhoneOff, Send, ArrowLeft, Check, SkipForward, Flag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { freshEntry, genderOptions, genderLabel, genderSymbol, reportReasons, reportSchema, type OwnGender } from "@/lib/voice-preferences";
+import { submitReport } from "@/lib/reports.functions";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
 import { search, loadRelay, connectCall, listenInbox, sendDM, type Me, type CallStatus } from "@/lib/voice";
@@ -47,7 +51,7 @@ function App() {
   const [stage, setStage] = useState<Stage>("home");
   const [gender, setGender] = useState<Gender>("Todos");
   const [mode, setMode] = useState<Mode>("Mundo");
-  const [menu, setMenu] = useState<"g" | "m" | null>(null);
+  const [menu, setMenu] = useState<"g" | "m" | "own" | null>(null);
   const [slide, setSlide] = useState(2);
   const [partner, setPartner] = useState<Person | null>(null);
   const [secs, setSecs] = useState(0);
@@ -65,6 +69,16 @@ function App() {
   const [error, setError] = useState("");
   const [callStatus, setCallStatus] = useState<CallStatus>("connecting");
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const guestId = useRef("");
+  const excluded = useRef(new Set<string>());
+  const blocked = useRef(new Set<string>());
+  const roomId = useRef("");
+  const [reportTarget, setReportTarget] = useState<{ person: Person; room: string } | null>(null);
+  const [reason, setReason] = useState<(typeof reportReasons)[number]["value"]>("shouting");
+  const [details, setDetails] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const sendReport = useServerFn(submitReport);
   const startingRef = useRef(false);
   const alive = useRef(true);
   const secsRef = useRef(0);
@@ -81,11 +95,15 @@ function App() {
 
   useEffect(() => {
     setHistory(load("vz_hist", [])); setFriends(load("vz_friends", [])); setChats(load("vz_chats", {}));
-    setMe(load<Me | null>("vz_me", null)); setReady(true);
+    guestId.current = freshEntry(localStorage).id;
+    blocked.current = new Set(load<string[]>("vz_blocked", []));
+    excluded.current = new Set(blocked.current);
+    setReady(true);
   }, []);
   useEffect(() => {
     if (!me) return;
     return listenInbox(me.id, (from, text) => {
+      if (blocked.current.has(from.id)) return;
       setFriends((fs) => { if (fs.some((f) => f.id === from.id)) return fs; const n = [from, ...fs]; save("vz_friends", n); return n; });
       setChats((prev) => { const n = { ...prev, [from.id]: [...(prev[from.id] || []), { from: "ele" as const, text }] }; save("vz_chats", n); return n; });
     });
@@ -104,17 +122,18 @@ function App() {
       if (!media || !media.getAudioTracks().some((track) => track.readyState === "live")) {
         setError("O microfone foi desconectado. Conecte-o e tente novamente."); cancel(); return;
       }
+      roomId.current = room;
       setPartner(peer); setSecs(0); setCallStatus("connecting"); setPlaybackBlocked(false); setStage("chamada");
       try {
         endCall.current = connectCall(room, caller, media, (audioEl.current ??= new Audio()),
           (message) => { hangupRef.current(); if (message) setError(message); }, setCallStatus, () => setPlaybackBlocked(true));
       } catch { setError("Não foi possível iniciar o áudio neste navegador."); cancel(); }
-    }, (message) => { setError(message); cancel(); });
+    }, (message) => { setError(message); cancel(); }, excluded.current);
   }, [stage, gender, mode, me]);
 
   const start = async () => {
     if (startingRef.current) return;
-    startingRef.current = true; setStarting(true); setError("");
+    startingRef.current = true; setStarting(true); setError(""); setNotice("");
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
       const media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
@@ -130,25 +149,56 @@ function App() {
   };
   const stopMic = () => { stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; };
   const cancel = () => { stopMic(); setStage("home"); };
-  const hangup = () => {
+  const hangup = (keepMic = false) => {
     if (partner) { const h = [{ ...partner, date: Date.now(), secs: secsRef.current }, ...history].slice(0, 50); setHistory(h); save("vz_hist", h); }
     endCall.current?.(); endCall.current = null;
-    stopMic(); setMuted(false); setPlaybackBlocked(false); setPartner(null); setStage("home");
+    if (!keepMic) stopMic();
+    else stream.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+    setMuted(false); setPlaybackBlocked(false); setPartner(null); setStage("home");
   };
   const hangupRef = useRef(hangup); hangupRef.current = hangup;
+  const next = () => {
+    if (!partner) return;
+    excluded.current.add(partner.id);
+    hangup(true);
+    if (stream.current?.getAudioTracks().some((t) => t.readyState === "live")) setStage("busca");
+    else setError("O microfone foi desconectado. Conecte-o e tente novamente.");
+  };
+  const report = () => {
+    if (!partner) return;
+    const target = { person: partner, room: roomId.current };
+    blocked.current.add(partner.id); excluded.current.add(partner.id);
+    save("vz_blocked", [...blocked.current]);
+    setFriends((fs) => { const remaining = fs.filter((f) => f.id !== partner.id); save("vz_friends", remaining); return remaining; });
+    setReportTarget(target); setDetails(""); setReason("shouting"); setError("");
+    setNotice("Contato bloqueado neste navegador."); hangup();
+  };
+  const confirmReport = async () => {
+    if (!me || !reportTarget || reportBusy) return;
+    const input = reportSchema.safeParse({ reporter: me.id, target: reportTarget.person.id, room: reportTarget.room, reason, details });
+    if (!input.success) { setError("Verifique os dados da denúncia."); return; }
+    setReportBusy(true); setError("");
+    try {
+      const result = await sendReport({ data: input.data });
+      if (!result.ok) { setError(result.message); return; }
+      setNotice(result.message); setReportTarget(null);
+    } catch { setError("A denúncia não foi registrada. O contato continua bloqueado; tente novamente."); }
+    finally { setReportBusy(false); }
+  };
   const toggleMute = () => { stream.current?.getAudioTracks().forEach((t) => (t.enabled = muted)); setMuted(!muted); };
   const addFriend = (p: Person) => {
     if (friends.some((f) => f.id === p.id)) return;
     const f = [p, ...friends]; setFriends(f); save("vz_friends", f);
   };
   const sendMsg = (p: Person, text: string) => {
+    if (blocked.current.has(p.id)) return;
     const c = { ...chats, [p.id]: [...(chats[p.id] || []), { from: "eu" as const, text }] };
     setChats(c); save("vz_chats", c);
     if (me) sendDM(p.id, { id: me.id, name: me.name, gender: me.gender, country: "" }, text);
   };
 
   if (!ready) return <Screen><span /></Screen>;
-  if (!me) return <Onboard onDone={(m) => { setMe(m); save("vz_me", m); }} />;
+  if (!me) return <Onboard id={guestId.current} onDone={setMe} />;
 
   if (stage === "busca") return (
     <Screen>
@@ -176,7 +226,8 @@ function App() {
           <div className="flex h-40 w-40 items-center justify-center rounded-full bg-accent">
             <img src={partner.gender === "F" ? bunny : ghost} alt="" width={816} height={816} className="h-36 w-36 object-contain" />
           </div>
-          <h1 className="text-4xl font-extrabold">{partner.name}</h1>
+          <h1 className="max-w-full break-words text-4xl font-extrabold">{partner.name} <GenderIndicator gender={partner.gender} /></h1>
+          <p className="max-w-full break-words text-lg">{me.name} <GenderIndicator gender={me.gender} /></p>
           <p className="text-muted-foreground">{partner.country}</p>
           <p role="status" className="text-sm text-muted-foreground">{callStatus === "connected" ? "Áudio conectado" : callStatus === "reconnecting" ? "Reconectando áudio..." : "Conectando áudio..."}</p>
           {playbackBlocked && <Button variant="secondary" onClick={async () => {
@@ -187,14 +238,16 @@ function App() {
             className="mt-2 flex items-center gap-2 rounded-full bg-secondary px-5 py-2 font-semibold">
             {isFriend ? <><Check size={18} /> Amigo adicionado</> : <><UserPlus size={18} /> Adicionar amigo</>}
           </Button>
+          <Button variant="ghost" onClick={report} className="gap-2 text-destructive"><Flag size={18} /> Denunciar e bloquear</Button>
         </div>
-        <div className="flex justify-center gap-8 p-8">
+        <div className="flex flex-wrap items-center justify-center gap-4 p-5">
           <Button variant="ghost" size="lg" onClick={toggleMute} aria-label={muted ? "Ativar microfone" : "Silenciar microfone"} aria-pressed={muted} className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary">
             {muted ? <MicOff /> : <Mic />}
           </Button>
-          <Button variant="ghost" size="lg" onClick={hangup} aria-label="Desligar" className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+          <Button variant="ghost" size="lg" onClick={() => hangup()} aria-label="Desligar" className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
             <PhoneOff />
           </Button>
+          <Button size="lg" onClick={next} className="h-16 gap-2 rounded-full px-5"><SkipForward size={22} /> Próximo</Button>
         </div>
       </Screen>
     );
@@ -206,6 +259,20 @@ function App() {
 
   return (
     <Screen>
+      <Dialog open={reportTarget !== null} onOpenChange={(open) => { if (!open && !reportBusy) setReportTarget(null); }}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+          <DialogTitle>Denunciar {reportTarget?.person.name}</DialogTitle>
+          <DialogDescription>A chamada foi encerrada e o contato bloqueado neste navegador. Denúncias ficam pendentes de análise; não há banimento automático nem gravação de áudio.</DialogDescription>
+          <label htmlFor="report-reason" className="font-semibold">Motivo</label>
+          <select id="report-reason" value={reason} onChange={(e) => setReason(e.target.value as typeof reason)} className="rounded-lg border border-border bg-card p-3">
+            {reportReasons.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+          <label htmlFor="report-details" className="font-semibold">Detalhes (opcional)</label>
+          <textarea id="report-details" value={details} onChange={(e) => setDetails(e.target.value)} maxLength={1000} rows={3} className="rounded-lg border border-border bg-card p-3" />
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <Button disabled={reportBusy} onClick={confirmReport}><Flag size={18} /> {reportBusy ? "Enviando..." : "Enviar denúncia"}</Button>
+        </DialogContent>
+      </Dialog>
       <header className="flex items-center justify-between px-5 pt-5">
         <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-accent">
           <img src={ghost} alt="Perfil" width={816} height={816} className="h-11 w-11 object-contain" />
@@ -227,25 +294,28 @@ function App() {
             </div>
           </div>
           <div className="space-y-4 px-5 pb-4">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">{me.name} <GenderIndicator gender={me.gender} /></div>
             <div className="relative grid grid-cols-2 gap-3">
               <Pill onClick={() => setMenu(menu === "g" ? null : "g")} label={gender === "Todos" ? "Gênero" : gender} icon="⚥" />
               <Pill onClick={() => setMenu(menu === "m" ? null : "m")} label={mode} icon={mode === "Brasil" ? "🇧🇷" : "🌏"} />
+              <Button variant="ghost" size="lg" onClick={() => setMenu(menu === "own" ? null : "own")} className="col-span-2 gap-2 rounded-full bg-card py-4 font-bold">Meu gênero: {genderLabel(me.gender)} <GenderIndicator gender={me.gender} /><ChevronUp size={18} /></Button>
               {menu && (
                 <div className="absolute bottom-full left-0 right-0 mb-2 rounded-3xl bg-card p-2">
-                  {(menu === "g" ? ["Todos", "Mulheres", "Homens"] : ["Mundo", "Brasil"]).map((o) => (
-                    <Button variant="ghost" size="lg" key={o} onClick={() => { menu === "g" ? setGender(o as Gender) : setMode(o as Mode); setMenu(null); }}
+                  {(menu === "own" ? genderOptions.map((o) => o.label) : menu === "g" ? ["Todos", "Mulheres", "Homens"] : ["Mundo", "Brasil"]).map((o) => (
+                    <Button variant="ghost" size="lg" key={o} onClick={() => { if (menu === "own") { const option = genderOptions.find((x) => x.label === o); if (option) setMe({ ...me, gender: option.value }); } else if (menu === "g") setGender(o as Gender); else setMode(o as Mode); setMenu(null); }}
                       className="flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left font-semibold hover:bg-secondary">
-                      {menu === "m" && (o === "Brasil" ? "🇧🇷 " : "🌏 ")}{o}{(menu === "g" ? gender : mode) === o && <Check size={18} className="text-primary" />}
+                      {menu === "m" && (o === "Brasil" ? "🇧🇷 " : "🌏 ")}{o}{(menu === "own" ? genderLabel(me.gender) : menu === "g" ? gender : mode) === o && <Check size={18} className="text-primary" />}
                     </Button>
                   ))}
                 </div>
               )}
             </div>
             {error && <p role="alert" className="text-center text-sm text-destructive">{error}</p>}
+            {notice && <p role="status" className="text-center text-sm text-muted-foreground">{notice}</p>}
             <Button variant="ghost" size="lg" disabled={starting} onClick={start} className="flex h-auto w-full whitespace-normal items-center justify-center gap-3 rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground">
               <Phone size={22} fill="currentColor" /> {starting ? "Aguardando microfone..." : "Iniciar bate-papo por voz"}
             </Button>
-            <p className="text-center text-sm text-muted-foreground">Apenas para maiores de 18 anos. Seja respeitoso.</p>
+            <p className="text-center text-sm text-muted-foreground">Apenas para maiores de 18 anos. Proibidos gritos, música alta, conteúdo sexual e assédio.</p>
           </div>
         </>
       )}
@@ -334,9 +404,13 @@ function ChatView({ person, msgs, onBack, onSend }: { person: Person; msgs: Msg[
   );
 }
 
-function Onboard({ onDone }: { onDone: (m: Me) => void }) {
+function GenderIndicator({ gender }: { gender: string }) {
+  return <span role="img" aria-label={genderLabel(gender)} className={`inline-block font-bold ${gender === "M" ? "text-gender-male" : gender === "F" ? "text-gender-female" : "text-gender-private"}`}>{genderSymbol(gender)}</span>;
+}
+
+function Onboard({ id, onDone }: { id: string; onDone: (m: Me) => void }) {
   const [name, setName] = useState("");
-  const [g, setG] = useState<"F" | "M" | null>(null);
+  const [g, setG] = useState<OwnGender | null>(null);
   return (
     <Screen>
       <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
@@ -345,15 +419,15 @@ function Onboard({ onDone }: { onDone: (m: Me) => void }) {
         <input value={name} onChange={(e) => setName(e.target.value.slice(0, 20))} placeholder="Seu apelido"
           className="w-full rounded-full bg-card px-5 py-4 text-center text-lg outline-none" />
         <div className="grid w-full grid-cols-2 gap-3">
-          {(["F", "M"] as const).map((x) => (
-            <Button variant="ghost" size="lg" key={x} onClick={() => setG(x)} className={`rounded-full py-4 text-lg font-bold ${g === x ? "bg-primary text-primary-foreground" : "bg-card"}`}>
-              {x === "F" ? "Sou mulher" : "Sou homem"}
+          {genderOptions.map((x) => (
+            <Button variant="ghost" size="lg" key={x.value} onClick={() => setG(x.value)} aria-pressed={g === x.value} className={`gap-2 rounded-full py-4 text-lg font-bold ${x.value === "U" ? "col-span-2" : ""} ${g === x.value ? "bg-primary text-primary-foreground" : "bg-card"}`}>
+              <GenderIndicator gender={x.value} />{x.label}
             </Button>
           ))}
         </div>
       </div>
       <div className="p-5">
-        <Button variant="ghost" size="lg" disabled={!name.trim() || !g} onClick={() => { if (g && name.trim()) onDone({ id: crypto.randomUUID(), name: name.trim(), gender: g }); }}
+        <Button variant="ghost" size="lg" disabled={!name.trim() || !g} onClick={() => { if (g && name.trim()) onDone({ id, name: name.trim(), gender: g }); }}
           className="w-full rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground disabled:opacity-40">Entrar</Button>
         <p className="mt-3 text-center text-sm text-muted-foreground">Ao entrar você confirma ter 18 anos ou mais.</p>
       </div>
