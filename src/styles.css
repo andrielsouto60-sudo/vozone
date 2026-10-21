@@ -34,6 +34,9 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-glow: var(--primary-glow);
+  --color-gender-male: var(--gender-male);
+  --color-gender-female: var(--gender-female);
+  --color-gender-private: var(--gender-private);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -72,6 +75,9 @@
   --popover-foreground: oklch(0.98 0 0);
   --primary: oklch(0.68 0.17 290);
   --primary-glow: oklch(0.78 0.13 295);
+  --gender-male: oklch(0.75 0.16 240);
+  --gender-female: oklch(0.78 0.18 350);
+  --gender-private: oklch(0.87 0.17 90);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.28 0.06 285);
   --secondary-foreground: oklch(0.95 0 0);
