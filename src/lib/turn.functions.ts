@@ -2,8 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 
 /** Issues short-lived Cloudflare TURN credentials; the API token never leaves the server. */
 export const getIceServers = createServerFn({ method: "POST" }).handler(async () => {
-  const id = process.env.CLOUDFLARE_TURN_KEY_ID;
-  const token = process.env.CLOUDFLARE_TURN_API_TOKEN;
+  const id = process.env['CLOUDFLARE_TURN_KEY_ID'];
+  const token = process.env['CLOUDFLARE_TURN_API_TOKEN'];
   if (!id || !token) return { iceServers: [] as RTCIceServer[] };
   const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${id}/credentials/generate-ice-servers`, {
     method: "POST",
