@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type Me = { id: string; name: string; gender: "F" | "M" };
+export type Me = { id: string; name: string; gender: "F" | "M" | "U" };
 export type Peer = { id: string; name: string; gender: string; country: string };
 type Want = "Todos" | "Mulheres" | "Homens";
 type Candidate = Peer & { want: Want; ts: number };
@@ -21,11 +21,11 @@ const ok = (want: Want, g: string) => want === "Todos" || (want === "Mulheres" ?
 const isPeer = (p: unknown): p is Peer => {
   if (!p || typeof p !== "object") return false;
   const v = p as Partial<Peer>;
-  return typeof v.id === "string" && typeof v.name === "string" && typeof v.country === "string" && (v.gender === "F" || v.gender === "M");
+  return typeof v.id === "string" && typeof v.name === "string" && typeof v.country === "string" && (v.gender === "F" || v.gender === "M" || v.gender === "U");
 };
 
 /** A repeated, acknowledged handshake prevents missing a peer during channel startup. */
-export function search(me: Me, want: Want, country: string, onMatch: (room: string, peer: Peer, caller: boolean) => void, onError: (message: string) => void = () => {}) {
+export function search(me: Me, want: Want, country: string, onMatch: (room: string, peer: Peer, caller: boolean) => void, onError: (message: string) => void = () => {}, excluded: ReadonlySet<string> = new Set()) {
   let done = false;
   let subscribed = false;
   let pending: { peer: Peer; room: string; caller: boolean; expires: number } | null = null;
@@ -40,7 +40,7 @@ export function search(me: Me, want: Want, country: string, onMatch: (room: stri
     if (done || !subscribed) return;
     if (pending && pending.expires < Date.now()) pending = null;
     if (!pending) {
-      const peers = Object.values(ch.presenceState<Candidate>()).flat().filter((p) => isPeer(p) && p.id !== me.id && ok(want, p.gender) && ok(p.want, me.gender));
+      const peers = Object.values(ch.presenceState<Candidate>()).flat().filter((p) => isPeer(p) && p.id !== me.id && !excluded.has(p.id) && ok(want, p.gender) && ok(p.want, me.gender));
       peers.sort((a, b) => a.ts - b.ts);
       const peer = peers.find((p) => me.id < p.id);
       if (peer) pending = { peer, room: crypto.randomUUID(), caller: true, expires: Date.now() + 10000 };
@@ -52,7 +52,7 @@ export function search(me: Me, want: Want, country: string, onMatch: (room: stri
     .on("presence", { event: "join" }, tick)
     .on("broadcast", { event: "invite" }, ({ payload }) => {
       if (done || payload?.to !== me.id || typeof payload.room !== "string" || !isPeer(payload.from)) return;
-      if (!ok(want, payload.from.gender) || !ok((payload.from as Candidate).want, me.gender) || payload.from.id >= me.id) return;
+      if (excluded.has(payload.from.id) || !ok(want, payload.from.gender) || !ok((payload.from as Candidate).want, me.gender) || payload.from.id >= me.id) return;
       if (pending && (pending.room !== payload.room || pending.peer.id !== payload.from.id)) return;
       pending = { peer: payload.from, room: payload.room, caller: false, expires: Date.now() + 10000 }; tick();
     })
