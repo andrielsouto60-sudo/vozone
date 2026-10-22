@@ -7,11 +7,10 @@ export const reportSchema = z.object({ reporter: z.string().uuid(), target: z.st
 export const genderLabel = (gender: string) => gender === "M" ? "Homem" : gender === "F" ? "Mulher" : "Não informar";
 export const genderSymbol = (gender: string) => gender === "M" ? "♂" : gender === "F" ? "♀" : "●";
 
-/** A name is never restored from an earlier visit; IDs are only browser-scoped, not verified identities. */
+/** Every visit is a new entry, with no restored name or lasting punishment. */
 export function freshEntry(storage: Pick<Storage, "getItem" | "setItem" | "removeItem">) {
   storage.removeItem("vz_me");
-  const previous = storage.getItem("vz_guest_id");
-  const id = previous && z.string().uuid().safeParse(previous).success ? previous : crypto.randomUUID();
-  storage.setItem("vz_guest_id", id);
+  storage.removeItem("vz_guest_id");
+  const id = crypto.randomUUID();
   return { id, me: null };
 }

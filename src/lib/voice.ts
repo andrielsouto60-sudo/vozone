@@ -169,6 +169,18 @@ export function listenInbox(myId: string, onMsg: (from: Peer, text: string) => v
   }).subscribe();
   return () => { void supabase.removeChannel(ch); };
 }
+/** A notification is only a hint; the receiver checks its entry on the server. */
+export function listenWarning(myId: string, onWarning: () => void) {
+  const ch = supabase.channel(`warning:${myId}`).on("broadcast", { event: "warning" }, onWarning).subscribe();
+  return () => { void supabase.removeChannel(ch); };
+}
+export function notifyWarning(to: string) {
+  const ch = supabase.channel(`warning:${to}`, { config: { broadcast: { ack: true } } });
+  const timeout = setTimeout(() => supabase.removeChannel(ch), 5000);
+  ch.subscribe((status) => {
+    if (status === "SUBSCRIBED") void ch.send({ type: "broadcast", event: "warning", payload: {} }).finally(() => { clearTimeout(timeout); void supabase.removeChannel(ch); });
+  });
+}
 export function sendDM(to: string, from: Peer, text: string) {
   const ch = supabase.channel(`inbox:${to}`, { config: { broadcast: { ack: true } } });
   const timeout = setTimeout(() => supabase.removeChannel(ch), 10000);
