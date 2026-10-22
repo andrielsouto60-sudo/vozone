@@ -6,6 +6,8 @@
 - [x] Enable a TURN relay: Cloudflare TURN credentials issued server-side (1h), verified live.
 
 # Call controls and safety
+- [ ] Automatically requeue the remaining participant after a peer leaves, preserving their microphone and preferences.
+- [ ] Enforce mutual location compatibility and verify automatic rematching with regression tests and live calls.
 - [x] Suspend the current guest entry after a valid call report; verified warning screen and removal of call controls, with fresh re-entry allowed.
 - [x] Add Próximo with a new search and no forced call time limit.
 - [x] Ask for a name, own gender and location on every entry; verified fresh form and both call indicators.
