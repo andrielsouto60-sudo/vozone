@@ -6,6 +6,7 @@
 - [x] Enable a TURN relay: Cloudflare TURN credentials issued server-side (1h), verified live.
 
 # Call controls and safety
+- [ ] Suspend the current guest entry immediately after a valid call report; allow fresh re-entry without permanent bans.
 - [ ] Add Próximo with a new search and no forced call time limit.
 - [ ] Ask for a name on each new entry; add own gender and both call indicators.
 - [ ] Add reporting and enforceable moderation/ban controls (identity and review approach awaiting user decision).
