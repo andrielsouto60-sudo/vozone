@@ -6,8 +6,9 @@
 - [x] Enable a TURN relay: Cloudflare TURN credentials issued server-side (1h), verified live.
 
 # Call controls and safety
-- [ ] Suspend the current guest entry immediately after a valid call report; allow fresh re-entry without permanent bans.
-- [ ] Add Próximo with a new search and no forced call time limit.
-- [ ] Ask for a name on each new entry; add own gender and both call indicators.
-- [ ] Add reporting and enforceable moderation/ban controls (identity and review approach awaiting user decision).
-- [ ] Verify changed call flows and safety rules.
+- [x] Suspend the current guest entry after a valid call report; verified warning screen and removal of call controls, with fresh re-entry allowed.
+- [x] Add Próximo with a new search and no forced call time limit.
+- [x] Ask for a name, own gender and location on every entry; verified fresh form and both call indicators.
+- [x] Record reports and enforce temporary entry suspension server-side without accounts or permanent bans.
+- [x] Verify reporting, suspension and re-entry through the live UI; 11 regression tests passed.
+- [ ] Confirm connected audio after the changes on actual devices (sandbox pairs matched, but connected audio was not confirmed; needs device/network test).
