@@ -1,17 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { reportSchema } from "./voice-preferences";
+import { entryCredentialSchema } from "./voice-entry.functions";
 
-/** Guest reports are unverified complaints, not proof and never an automatic ban. */
+/** A valid reciprocal call complaint ends only the target's current entry. */
 export const submitReport = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => reportSchema.parse(data))
+  .inputValidator((data: unknown) => reportSchema.and(entryCredentialSchema).parse(data))
   .handler(async ({ data }) => {
+    if (data.id !== data.reporter) return { ok: false, message: "A entrada não corresponde à denúncia." };
     const ip = getRequestHeader("cf-connecting-ip") ?? "unknown";
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
     const hash = Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
-    // Narrow public write: validated guest complaint only; no privileged reads or bans.
+    const { hashEntryToken } = await import("./voice-entry.server");
+    // Secret entry capability and reciprocal room records authorize this narrow write.
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.rpc("submit_voice_report", { p_reporter: data.reporter, p_target: data.target, p_room: data.room, p_reason: data.reason, p_details: data.details, p_hash: hash });
-    if (error) return { ok: false, message: "Não foi possível registrar a denúncia. Tente mais tarde." };
-    return { ok: true, message: "Denúncia registrada, pendente de análise. Contato bloqueado neste navegador." };
+    const { data: accepted, error } = await supabaseAdmin.rpc("warn_voice_entry", { p_reporter: data.reporter, p_token_hash: await hashEntryToken(data.token), p_target: data.target, p_room: data.room, p_reason: data.reason, p_details: data.details, p_request_hash: hash });
+    if (error || !accepted) return { ok: false, message: "Não foi possível aplicar a suspensão. Verifique a conexão e tente novamente." };
+    return { ok: true, message: "Denúncia registrada. A entrada atual desse contato foi suspensa como advertência." };
   });

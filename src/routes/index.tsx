@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { freshEntry, genderOptions, genderLabel, genderSymbol, reportReasons, reportSchema, type OwnGender } from "@/lib/voice-preferences";
 import { submitReport } from "@/lib/reports.functions";
+import { createVoiceEntry, checkVoiceEntry, registerVoiceRoom, type EntryCredential } from "@/lib/voice-entry.functions";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
-import { search, loadRelay, connectCall, listenInbox, sendDM, type Me, type CallStatus } from "@/lib/voice";
+import { search, loadRelay, connectCall, listenInbox, sendDM, listenWarning, notifyWarning, type Me, type CallStatus } from "@/lib/voice";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -78,6 +79,12 @@ function App() {
   const [details, setDetails] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const credential = useRef<EntryCredential | null>(null);
+  const [suspended, setSuspended] = useState(false);
+  const callAttempt = useRef(0);
+  const createEntry = useServerFn(createVoiceEntry);
+  const checkEntry = useServerFn(checkVoiceEntry);
+  const registerRoom = useServerFn(registerVoiceRoom);
   const sendReport = useServerFn(submitReport);
   const startingRef = useRef(false);
   const alive = useRef(true);
@@ -108,6 +115,33 @@ function App() {
       setChats((prev) => { const n = { ...prev, [from.id]: [...(prev[from.id] || []), { from: "ele" as const, text }] }; save("vz_chats", n); return n; });
     });
   }, [me]);
+  const suspendRef = useRef(() => {});
+  suspendRef.current = () => {
+    hangupRef.current();
+    credential.current = null;
+    setMe(null); setOpenChat(null); setReportTarget(null);
+    setGender("Todos"); setMode("Mundo"); setMenu(null); setTab("voz");
+    setSuspended(true);
+  };
+  useEffect(() => {
+    if (!me) return;
+    let disposed = false;
+    let checking = false;
+    const verify = async () => {
+      const entry = credential.current;
+      if (!entry || checking) return;
+      checking = true;
+      try {
+        const result = await checkEntry({ data: entry });
+        if (!disposed && result.state !== "active") suspendRef.current();
+      } catch { /* A lost request is not evidence of suspension; retry. */ }
+      finally { checking = false; }
+    };
+    const stop = listenWarning(me.id, () => { void verify(); });
+    const interval = setInterval(() => { void verify(); }, 2000);
+    window.addEventListener("focus", verify);
+    return () => { disposed = true; stop(); clearInterval(interval); window.removeEventListener("focus", verify); };
+  }, [me?.id, checkEntry]);
   useEffect(() => { const i = setInterval(() => setSlide((s) => (s + 1) % 3), 4000); return () => clearInterval(i); }, []);
   useEffect(() => {
     if (stage !== "chamada" || callStatus !== "connected") return;
@@ -117,7 +151,15 @@ function App() {
     if (stage !== "busca" || !me) return;
     const country = mode === "Brasil" ? "🇧🇷 Brasil" : "🌏 Mundo";
     void loadRelay();
-    return search(me, gender, country, (room, peer, caller) => {
+    return search(me, gender, country, async (room, peer, caller) => {
+      const attempt = ++callAttempt.current;
+      const entry = credential.current;
+      if (!entry) { cancel(); return; }
+      try {
+        const result = await registerRoom({ data: { ...entry, room, peer: peer.id } });
+        if (attempt !== callAttempt.current || !alive.current) return;
+        if (!result.ok) { setError("Essa entrada não está disponível. Tente outra chamada."); cancel(); return; }
+      } catch { setError("Não foi possível verificar a chamada. Tente novamente."); cancel(); return; }
       const media = stream.current;
       if (!media || !media.getAudioTracks().some((track) => track.readyState === "live")) {
         setError("O microfone foi desconectado. Conecte-o e tente novamente."); cancel(); return;
@@ -135,9 +177,13 @@ function App() {
     if (startingRef.current) return;
     startingRef.current = true; setStarting(true); setError(""); setNotice("");
     try {
+      const entry = credential.current;
+      if (!entry) return;
+      const access = await checkEntry({ data: entry });
+      if (access.state !== "active") { suspendRef.current(); return; }
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
       const media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      if (!alive.current) { media.getTracks().forEach((track) => track.stop()); return; }
+      if (!alive.current || credential.current !== entry) { media.getTracks().forEach((track) => track.stop()); return; }
       stream.current = media;
       media.getAudioTracks().forEach((track) => { track.onended = () => { hangupRef.current(); setError("O microfone foi desconectado. Conecte-o e tente novamente."); }; });
       setMuted(false); setStage("busca");
@@ -148,8 +194,9 @@ function App() {
     } finally { startingRef.current = false; if (alive.current) setStarting(false); }
   };
   const stopMic = () => { stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; };
-  const cancel = () => { stopMic(); setStage("home"); };
+  const cancel = () => { ++callAttempt.current; stopMic(); setStage("home"); };
   const hangup = (keepMic = false) => {
+    ++callAttempt.current;
     if (partner) { const h = [{ ...partner, date: Date.now(), secs: secsRef.current }, ...history].slice(0, 50); setHistory(h); save("vz_hist", h); }
     endCall.current?.(); endCall.current = null;
     if (!keepMic) stopMic();
@@ -174,13 +221,15 @@ function App() {
     setNotice("Contato bloqueado neste navegador."); hangup();
   };
   const confirmReport = async () => {
-    if (!me || !reportTarget || reportBusy) return;
+    const entry = credential.current;
+    if (!me || !entry || !reportTarget || reportBusy) return;
     const input = reportSchema.safeParse({ reporter: me.id, target: reportTarget.person.id, room: reportTarget.room, reason, details });
     if (!input.success) { setError("Verifique os dados da denúncia."); return; }
     setReportBusy(true); setError("");
     try {
-      const result = await sendReport({ data: input.data });
+      const result = await sendReport({ data: { ...input.data, ...entry } });
       if (!result.ok) { setError(result.message); return; }
+      notifyWarning(reportTarget.person.id);
       setNotice(result.message); setReportTarget(null);
     } catch { setError("A denúncia não foi registrada. O contato continua bloqueado; tente novamente."); }
     finally { setReportBusy(false); }
@@ -198,7 +247,20 @@ function App() {
   };
 
   if (!ready) return <Screen><span /></Screen>;
-  if (!me) return <Onboard id={guestId.current} onDone={setMe} />;
+  if (suspended) return <Screen>
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
+      <Flag size={48} className="text-destructive" />
+      <h1 className="text-3xl font-extrabold">Acesso suspenso</h1>
+      <p role="alert" className="text-muted-foreground">Sua entrada foi suspensa após uma denúncia. A chamada foi encerrada como advertência.</p>
+      <p className="text-muted-foreground">Respeite as outras pessoas. Não são permitidos gritos, música alta, conteúdo sexual ou assédio.</p>
+    </div>
+  </Screen>;
+  if (!me) return <Onboard onDone={async (profile, location) => {
+    const entry = await createEntry();
+    credential.current = entry;
+    guestId.current = entry.id;
+    setMode(location); setMe({ ...profile, id: entry.id });
+  }} />;
 
   if (stage === "busca") return (
     <Screen>
@@ -262,7 +324,7 @@ function App() {
       <Dialog open={reportTarget !== null} onOpenChange={(open) => { if (!open && !reportBusy) setReportTarget(null); }}>
         <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
           <DialogTitle>Denunciar {reportTarget?.person.name}</DialogTitle>
-          <DialogDescription>A chamada foi encerrada e o contato bloqueado neste navegador. Denúncias ficam pendentes de análise; não há banimento automático nem gravação de áudio.</DialogDescription>
+          <DialogDescription>A chamada foi encerrada. Ao enviar, a entrada atual desse contato será suspensa como advertência, sem banimento permanente. Não gravamos áudio.</DialogDescription>
           <label htmlFor="report-reason" className="font-semibold">Motivo</label>
           <select id="report-reason" value={reason} onChange={(e) => setReason(e.target.value as typeof reason)} className="rounded-lg border border-border bg-card p-3">
             {reportReasons.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -408,9 +470,12 @@ function GenderIndicator({ gender }: { gender: string }) {
   return <span role="img" aria-label={genderLabel(gender)} className={`inline-block font-bold ${gender === "M" ? "text-gender-male" : gender === "F" ? "text-gender-female" : "text-gender-private"}`}>{genderSymbol(gender)}</span>;
 }
 
-function Onboard({ id, onDone }: { id: string; onDone: (m: Me) => void }) {
+function Onboard({ onDone }: { onDone: (m: Omit<Me, "id">, location: Mode) => Promise<void> }) {
   const [name, setName] = useState("");
   const [g, setG] = useState<OwnGender | null>(null);
+  const [location, setLocation] = useState<Mode | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [entryError, setEntryError] = useState("");
   return (
     <Screen>
       <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
@@ -425,10 +490,19 @@ function Onboard({ id, onDone }: { id: string; onDone: (m: Me) => void }) {
             </Button>
           ))}
         </div>
+        <div className="grid w-full grid-cols-2 gap-3" aria-label="Localidade">
+          {(["Mundo", "Brasil"] as const).map((value) => <Button key={value} variant={location === value ? "default" : "secondary"} aria-pressed={location === value} onClick={() => setLocation(value)}>{value === "Brasil" ? "🇧🇷" : "🌏"} {value}</Button>)}
+        </div>
+        {entryError && <p role="alert" className="text-destructive">{entryError}</p>}
       </div>
       <div className="p-5">
-        <Button variant="ghost" size="lg" disabled={!name.trim() || !g} onClick={() => { if (g && name.trim()) onDone({ id, name: name.trim(), gender: g }); }}
-          className="w-full rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground disabled:opacity-40">Entrar</Button>
+        <Button variant="ghost" size="lg" disabled={busy || !name.trim() || !g || !location} onClick={async () => {
+          if (!g || !location || !name.trim() || busy) return;
+          setBusy(true); setEntryError("");
+          try { await onDone({ name: name.trim(), gender: g }, location); }
+          catch { setEntryError("Não foi possível entrar. Tente novamente."); }
+          finally { setBusy(false); }
+        }} className="w-full rounded-full bg-gradient-primary py-4 text-lg font-bold text-primary-foreground disabled:opacity-40">{busy ? "Entrando..." : "Entrar"}</Button>
         <p className="mt-3 text-center text-sm text-muted-foreground">Ao entrar você confirma ter 18 anos ou mais.</p>
       </div>
     </Screen>
