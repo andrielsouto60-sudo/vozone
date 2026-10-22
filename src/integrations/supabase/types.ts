@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      voice_entries: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          suspended_at: string | null
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          suspended_at?: string | null
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          suspended_at?: string | null
+          token_hash?: string
+        }
+        Relationships: []
+      }
       voice_reports: {
         Row: {
           created_at: string
@@ -50,11 +74,53 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_room_entries: {
+        Row: {
+          entry_id: string
+          peer_id: string
+          room_id: string
+        }
+        Insert: {
+          entry_id: string
+          peer_id: string
+          room_id: string
+        }
+        Update: {
+          entry_id?: string
+          peer_id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_room_entries_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "voice_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_room_entries_peer_id_fkey"
+            columns: ["peer_id"]
+            isOneToOne: false
+            referencedRelation: "voice_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      register_voice_room: {
+        Args: {
+          p_entry: string
+          p_hash: string
+          p_peer: string
+          p_room: string
+        }
+        Returns: boolean
+      }
       submit_voice_report: {
         Args: {
           p_details: string
@@ -65,6 +131,18 @@ export type Database = {
           p_target: string
         }
         Returns: string
+      }
+      warn_voice_entry: {
+        Args: {
+          p_details: string
+          p_reason: string
+          p_reporter: string
+          p_request_hash: string
+          p_room: string
+          p_target: string
+          p_token_hash: string
+        }
+        Returns: boolean
       }
     }
     Enums: {

@@ -8,6 +8,13 @@
       "when": 1792610825445,
       "tag": "0000_voice_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792637234047,
+      "tag": "0001_guest_session_warning",
+      "breakpoints": true
     }
   ]
 }
