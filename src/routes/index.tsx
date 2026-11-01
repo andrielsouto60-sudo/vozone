@@ -168,7 +168,7 @@ function App() {
       setPartner(peer); setSecs(0); setCallStatus("connecting"); setPlaybackBlocked(false); setStage("chamada");
       try {
         endCall.current = connectCall(room, caller, media, (audioEl.current ??= new Audio()),
-          (message) => { hangupRef.current(); if (message) setError(message); }, setCallStatus, () => setPlaybackBlocked(true));
+          (message) => { if (message) { hangupRef.current(); setError(message); } else requeueRef.current(); }, setCallStatus, () => setPlaybackBlocked(true));
       } catch { setError("Não foi possível iniciar o áudio neste navegador."); cancel(); }
     }, (message) => { setError(message); cancel(); }, excluded.current);
   }, [stage, gender, mode, me]);
@@ -211,6 +211,8 @@ function App() {
     if (stream.current?.getAudioTracks().some((t) => t.readyState === "live")) setStage("busca");
     else setError("O microfone foi desconectado. Conecte-o e tente novamente.");
   };
+  const nextRef = useRef(next); nextRef.current = next;
+  const requeueRef = useRef(() => { setNotice("A outra pessoa saiu. Procurando alguém novo..."); nextRef.current(); });
   const report = () => {
     if (!partner) return;
     const target = { person: partner, room: roomId.current };
