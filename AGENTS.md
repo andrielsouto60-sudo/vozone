@@ -14,3 +14,4 @@
 - TURN relay credentials must be short-lived and supplied by a verified server integration, never a static public client secret; STUN-only connections cannot cover every network.
 - Relay (TURN) credentials come from a server function using Cloudflare Realtime TURN secrets; the client caches them under an hour and falls back to STUN, so the token never reaches the browser.
 - Guest entries use server-issued secret capabilities, hashed at rest; reports require reciprocal room membership and atomically suspend only that entry. Warning broadcasts are hints verified on the server, with polling as fallback, so clients cannot forge a suspension notification.
+- Matching requires mutual gender and region compatibility via compatible() in voice.ts; Brasil pairs only with Brasil so both sides' choices hold.
