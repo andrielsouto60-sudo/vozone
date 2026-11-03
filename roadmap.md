@@ -1,3 +1,11 @@
+# Voice monetization MVP
+- [ ] Confirm feasible anti-abuse limits and secure Pix confirmation method.
+- [ ] Implement server-authoritative guest wallet, 100-coin bonus, inactivity cooldown and paid-search debits with regression tests.
+- [ ] Enforce paid matchmaking on the server and implement compatible two-person fallback without charging automatic requeue.
+- [ ] Add wallet, paid-filter lock, fixed Pix packages and authenticated administration.
+- [ ] Update universal privacy choices and reserved advertisement placements.
+- [ ] Verify payment settlement, concurrent debits, free calls, filtered calls and requeue end-to-end.
+
 # Call reliability
 - [x] Repair matchmaking and call signaling races.
 - [x] Handle microphone permissions, audio playback, disconnects, and cleanup visibly.
