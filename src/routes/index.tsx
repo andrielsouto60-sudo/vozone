@@ -11,6 +11,8 @@ import { submitReport } from "@/lib/reports.functions";
 import { createVoiceEntry, checkVoiceEntry, registerVoiceRoom, type EntryCredential } from "@/lib/voice-entry.functions";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
+import vozoneLogo from "@/assets/vozone_logo.png";
+
 import { search, loadRelay, connectCall, listenInbox, sendDM, listenWarning, notifyWarning, type Me, type CallStatus } from "@/lib/voice";
 
 export const Route = createFileRoute("/")({
@@ -341,7 +343,7 @@ function App() {
         <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-accent">
           <img src={ghost} alt="Perfil" width={816} height={816} className="h-11 w-11 object-contain" />
         </div>
-        <span className="text-xl font-extrabold text-primary-glow">Vozone</span>
+        <img src={vozoneLogo} alt="Vozone" width={1000} height={280} className="h-7 w-auto object-contain" />
         <div className="flex items-center gap-4 text-muted-foreground">
           <UserPlus size={24} /><Bell size={24} />
         </div>
@@ -481,8 +483,10 @@ function Onboard({ onDone }: { onDone: (m: Omit<Me, "id">, location: Mode) => Pr
   return (
     <Screen>
       <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
+        <img src={vozoneLogo} alt="Vozone" width={1000} height={280} className="h-8 w-auto object-contain" />
         <img src={bunny} alt="" width={816} height={816} className="h-32 w-32 object-contain" />
         <h1 className="text-3xl font-extrabold">Bem-vindo ao Vozone</h1>
+
         <input value={name} onChange={(e) => setName(e.target.value.slice(0, 20))} placeholder="Seu apelido"
           className="w-full rounded-full bg-card px-5 py-4 text-center text-lg outline-none" />
         <div className="grid w-full grid-cols-2 gap-3">
