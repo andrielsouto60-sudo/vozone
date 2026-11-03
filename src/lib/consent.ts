@@ -6,29 +6,12 @@ declare global {
 }
 
 export const STORAGE_KEY = "cookie_consent";
-const CONSENT_COUNTRIES = ['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO','GB','CH','CA'];
 const AW_ID = "AW-18553342853";
 const SEND_TO = "AW-18553342853/7qaUCMGBmbEdEIWX9o5F";
 
-let consentRegion: Promise<boolean> | undefined;
-
+/** Every visitor must make an explicit optional-advertising choice. */
 export function isConsentRequiredRegion(): Promise<boolean> {
-  return consentRegion ??= lookupConsentRegion();
-}
-
-async function lookupConsentRegion(): Promise<boolean> {
-  try {
-    const res = await fetch("/cdn-cgi/trace", { signal: AbortSignal.timeout(2000) });
-    if (!res.ok) return true;
-    const trace = await res.text();
-    const host = trace.match(/^h=(.+)$/m)?.[1]?.trim().toLowerCase();
-    if (host !== location.hostname) return true;
-    const country = trace.match(/^loc=([A-Z0-9]{2})$/m)?.[1];
-    if (!country || country === "XX" || country === "T1") return true;
-    return CONSENT_COUNTRIES.includes(country);
-  } catch {
-    return true;
-  }
+  return Promise.resolve(true);
 }
 
 export async function hasAdConsent(): Promise<boolean> {
@@ -36,15 +19,10 @@ export async function hasAdConsent(): Promise<boolean> {
 }
 
 export async function canTrackAds(): Promise<boolean> {
-  const choice = localStorage.getItem(STORAGE_KEY);
-  if (choice !== null) return choice === "granted";
-  const required = await isConsentRequiredRegion();
-  const latest = localStorage.getItem(STORAGE_KEY);
-  return latest !== null ? latest === "granted" : !required;
+  return hasAdConsent();
 }
 
 export function updateConsent(decision: "granted" | "denied") {
-  if (localStorage.getItem(STORAGE_KEY) === "denied") decision = "denied";
   if (decision === "denied") window.gtag?.("set", "user_data", null);
   window.gtag?.("consent", "update", {
     ad_storage: decision,
@@ -53,9 +31,9 @@ export function updateConsent(decision: "granted" | "denied") {
   });
 }
 
-export async function loadGoogleAds(consentModeRoute = true) {
+export async function loadGoogleAds(_consentModeRoute = true) {
   const allowed = await canTrackAds();
-  if (!consentModeRoute && !allowed) return;
+  if (!allowed || localStorage.getItem(STORAGE_KEY) !== "granted") return;
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
   if (!document.querySelector("script[data-google-ads]")) {
@@ -72,7 +50,9 @@ export async function loadGoogleAds(consentModeRoute = true) {
 }
 
 export async function trackVoiceSearch() {
+  if (!(await canTrackAds())) return;
   await loadGoogleAds(true);
+  if (localStorage.getItem(STORAGE_KEY) !== "granted") return;
   window.gtag?.("event", "conversion", { send_to: SEND_TO, value: 1.0, currency: "BRL" });
 }
 
