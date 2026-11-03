@@ -14,6 +14,7 @@ import ghost from "@/assets/ghost.png";
 import vozoneLogo from "@/assets/vozone_logo.png";
 
 import { search, loadRelay, connectCall, listenInbox, sendDM, listenWarning, notifyWarning, type Me, type CallStatus } from "@/lib/voice";
+import { trackVoiceSearch } from "@/lib/consent";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -188,7 +189,7 @@ function App() {
       if (!alive.current || credential.current !== entry) { media.getTracks().forEach((track) => track.stop()); return; }
       stream.current = media;
       media.getAudioTracks().forEach((track) => { track.onended = () => { hangupRef.current(); setError("O microfone foi desconectado. Conecte-o e tente novamente."); }; });
-      setMuted(false); setStage("busca");
+      setMuted(false); setStage("busca"); void trackVoiceSearch();
     } catch (cause) {
       if (!alive.current) return;
       const name = cause instanceof Error ? cause.name : "";
