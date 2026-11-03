@@ -16,3 +16,4 @@
 - Guest entries use server-issued secret capabilities, hashed at rest; reports require reciprocal room membership and atomically suspend only that entry. Warning broadcasts are hints verified on the server, with polling as fallback, so clients cannot forge a suspension notification.
 - Matching requires mutual gender and region compatibility via compatible() in voice.ts; Brasil pairs only with Brasil so both sides' choices hold.
 - Optional ad scripts and conversion events are gated by explicit stored consent in src/lib/consent.ts; denied defaults apply worldwide because the app requires first-visit privacy choices in every region.
+- Built-in payments are test-only until go-live and confirmed payment-method availability; checkout must not substitute an unavailable required payment method, and coin fulfillment must be atomic, verified and environment-scoped.
