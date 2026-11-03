@@ -40,7 +40,7 @@ describe("optional advertising consent", () => {
   it("stops new measurements when consent is withdrawn", async () => {
     localStorage.setItem(STORAGE_KEY, "denied");
     updateConsent("denied");
-    vi.mocked(window.gtag).mockClear();
+    if (window.gtag) vi.mocked(window.gtag).mockClear();
     await trackVoiceSearch();
     expect(window.gtag).not.toHaveBeenCalled();
   });
