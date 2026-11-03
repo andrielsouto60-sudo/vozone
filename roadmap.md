@@ -1,4 +1,3 @@
-# Call reliability
 # Voice monetization MVP
 - [ ] Confirm feasible anti-abuse limits and secure Pix confirmation method.
 - [ ] Implement server-authoritative guest wallet, 100-coin bonus, inactivity cooldown and paid-search debits with regression tests.
