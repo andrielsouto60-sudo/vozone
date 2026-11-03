@@ -41,18 +41,18 @@ export function ConsentBanner() {
       aria-label="Aviso de cookies"
       className="fixed inset-x-4 bottom-4 z-50 rounded-3xl border border-border bg-card p-5 shadow-xl"
     >
-      <p className="text-sm font-semibold">Aviso de cookies</p>
+      <p className="text-sm font-semibold">Privacidade e cookies</p>
       <p className="mt-2 text-sm text-muted-foreground">
-        Usamos cookies para medir os anúncios do Vozone: quantas pessoas que viu um anúncio
-        começaram uma conversa por voz. Os dados vão para o Google Ads. Você pode aceitar ou
-        recusar, e mudar de ideia depois.
+        Guardamos neste navegador seu histórico, amigos e mensagens. Cookies de publicidade
+        são opcionais: se você aceitar, o Google Ads poderá medir quando uma busca por voz
+        começa. Recusar não impede conversar. Você pode mudar sua escolha depois.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button onClick={() => decide("granted")} className="rounded-full bg-gradient-primary font-bold text-primary-foreground">
-          Aceitar
+          Aceitar publicidade
         </Button>
         <Button variant="ghost" onClick={() => decide("denied")} className="rounded-full">
-          Recusar
+          Só necessários
         </Button>
         <Link to="/privacidade" className="ml-auto text-sm underline underline-offset-4 text-muted-foreground">
           Privacidade

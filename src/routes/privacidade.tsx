@@ -21,9 +21,18 @@ function Privacidade() {
     <main className="min-h-screen bg-background px-6 py-10 text-foreground">
       <div className="mx-auto max-w-2xl">
         <h1 className="text-3xl font-extrabold">Privacidade</h1>
+        <h2 className="mt-8 text-xl font-bold">Conversas e segurança</h2>
+        <p className="mt-2 text-muted-foreground">
+          O áudio das chamadas não é gravado pelo Vozone. Histórico, amigos e mensagens ficam
+          guardados neste navegador. Entradas temporárias e denúncias ficam no servidor para
+          verificar participantes e aplicar suspensões. Nas denúncias, o endereço IP é
+          transformado em hash; esse identificador ainda deve ser tratado como dado pessoal.
+          A publicidade não recebe seu apelido nem o conteúdo das chamadas.
+        </p>
         <p className="mt-4 text-muted-foreground">
           O Vozone usa cookies de publicidade para medir o desempenho dos anúncios: saber quantas
-          pessoas que clicaram em um anúncio começaram uma conversa por voz no site.
+          pessoas que clicaram em um anúncio começaram uma busca por voz no site. Esses cookies
+          só são ativados após sua aceitação, inclusive no Brasil.
         </p>
         <h2 className="mt-8 text-xl font-bold">Quem recebe esses dados</h2>
         <p className="mt-2 text-muted-foreground">

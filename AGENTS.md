@@ -15,3 +15,4 @@
 - Relay (TURN) credentials come from a server function using Cloudflare Realtime TURN secrets; the client caches them under an hour and falls back to STUN, so the token never reaches the browser.
 - Guest entries use server-issued secret capabilities, hashed at rest; reports require reciprocal room membership and atomically suspend only that entry. Warning broadcasts are hints verified on the server, with polling as fallback, so clients cannot forge a suspension notification.
 - Matching requires mutual gender and region compatibility via compatible() in voice.ts; Brasil pairs only with Brasil so both sides' choices hold.
+- Optional ad scripts and conversion events are gated by explicit stored consent in src/lib/consent.ts; denied defaults apply worldwide because the app requires first-visit privacy choices in every region.
