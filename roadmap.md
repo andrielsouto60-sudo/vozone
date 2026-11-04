@@ -1,6 +1,7 @@
 # Voice monetization MVP
 - [x] Register four one-time test products at the requested prices: vozone_coins_10_brl (100 cents), vozone_coins_20_brl (200 cents), vozone_coins_30_brl (300 cents), vozone_coins_50_brl (500 cents), fixed quantity 1 and personal-use SaaS tax classification.
-- [ ] Confirm purchase fulfillment and whether subscriptions/upgrades/cancellations are part of this request; embedded checkout remains blocked by required Pix unavailability and unimplemented wallet fulfillment.
+- [x] Confirm one-time purchases only: confirmed purchased coins add to existing balance, never expire and survive nickname changes. No subscriptions or plan changes. Owner requires Pix only and declined test card checkout.
+- [ ] Implement embedded checkout and atomic purchased-coin fulfillment once a Pix-capable integration is connected; the current test account reports Pix unavailable.
 - [x] Enable built-in Stripe in test after approval and check Pix availability (account configuration returns pix.available=false for both default configurations; no checkout created).
 - [ ] Resolve automatic Pix provider blocker: this test account does not support Pix; do not substitute card payments or static-key confirmation without approval.
 - [ ] Implement server-authoritative guest wallet, 100-coin bonus, inactivity cooldown and paid-search debits with regression tests.
