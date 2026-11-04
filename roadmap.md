@@ -1,4 +1,5 @@
 # Voice monetization MVP
+- [ ] Add the requested product catalog and embedded checkout; confirm purchase fulfillment and whether subscriptions/upgrades/cancellations are part of this request before implementing them.
 - [x] Enable built-in Stripe in test after approval and check Pix availability (account configuration returns pix.available=false for both default configurations; no checkout or catalog created).
 - [ ] Resolve automatic Pix provider blocker: this test account does not support Pix; do not substitute card payments or static-key confirmation without approval.
 - [ ] Implement server-authoritative guest wallet, 100-coin bonus, inactivity cooldown and paid-search debits with regression tests.
