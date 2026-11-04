@@ -107,6 +107,36 @@ export type Database = {
           },
         ]
       }
+      voice_wallets: {
+        Row: {
+          created_at: string
+          id: string
+          last_seen_at: string
+          nickname: string
+          paid_coins: number
+          promo_coins: number
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          nickname: string
+          paid_coins?: number
+          promo_coins?: number
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          nickname?: string
+          paid_coins?: number
+          promo_coins?: number
+          token_hash?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
