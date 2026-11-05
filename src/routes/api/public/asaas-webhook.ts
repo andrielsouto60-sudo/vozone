@@ -8,7 +8,7 @@ export const Route = createFileRoute("/api/public/asaas-webhook")({
     handlers: {
       POST: async ({ request }) => {
         const { safeEqual, asaas, asaasLivemode } = await import("@/lib/asaas.server");
-        const expected = process.env.ASAAS_WEBHOOK_TOKEN;
+        const expected = process.env["ASAAS_WEBHOOK_TOKEN"];
         const got = request.headers.get("asaas-access-token") ?? "";
         if (!expected || !safeEqual(got, expected)) return new Response("unauthorized", { status: 401 });
         const parsed = event.safeParse(await request.json().catch(() => null));

@@ -8,7 +8,7 @@ export const COIN_PACKAGES = {
 export type PackageId = keyof typeof COIN_PACKAGES;
 
 function config() {
-  const key = process.env.ASAAS_API_KEY;
+  const key = process.env["ASAAS_API_KEY"];
   if (!key) throw new Error("Pix ainda não está configurado.");
   const livemode = key.startsWith("$aact_prod_");
   return { key, livemode, base: livemode ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3" };
@@ -23,7 +23,7 @@ export async function asaas<T>(path: string, init?: { method?: string; body?: un
   const res = await fetch(base + path, {
     method: init?.method ?? "GET",
     headers: { access_token: key, "Content-Type": "application/json", "User-Agent": "Vozone" },
-    body: init?.body ? JSON.stringify(init.body) : undefined,
+    ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
   });
   const json = (await res.json().catch(() => ({}))) as T & { errors?: { description: string }[] };
   if (!res.ok) throw new Error(json.errors?.[0]?.description || `Asaas ${res.status}`);
