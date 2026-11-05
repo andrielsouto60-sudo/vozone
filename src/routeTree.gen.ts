@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
+import { Route as ApiPublicAsaasWebhookRouteImport } from './routes/api/public/asaas-webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +23,40 @@ const PrivacidadeRoute = PrivacidadeRouteImport.update({
   path: '/privacidade',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicAsaasWebhookRoute = ApiPublicAsaasWebhookRouteImport.update({
+  id: '/api/public/asaas-webhook',
+  path: '/api/public/asaas-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/privacidade': typeof PrivacidadeRoute
+  '/api/public/asaas-webhook': typeof ApiPublicAsaasWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/privacidade'
+  fullPaths: '/' | '/privacidade' | '/api/public/asaas-webhook'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/privacidade'
-  id: '__root__' | '/' | '/privacidade'
+  to: '/' | '/privacidade' | '/api/public/asaas-webhook'
+  id: '__root__' | '/' | '/privacidade' | '/api/public/asaas-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
+  ApiPublicAsaasWebhookRoute: typeof ApiPublicAsaasWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacidadeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/asaas-webhook': {
+      id: '/api/public/asaas-webhook'
+      path: '/api/public/asaas-webhook'
+      fullPath: '/api/public/asaas-webhook'
+      preLoaderRoute: typeof ApiPublicAsaasWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PrivacidadeRoute: PrivacidadeRoute,
+  ApiPublicAsaasWebhookRoute: ApiPublicAsaasWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
