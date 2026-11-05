@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { freshEntry, genderOptions, genderLabel, genderSymbol, reportReasons, reportSchema, type OwnGender } from "@/lib/voice-preferences";
 import { submitReport } from "@/lib/reports.functions";
+import { BuyCoinsDialog } from "@/components/buy-coins-dialog";
 import { openWallet } from "@/lib/wallet.functions";
 import { createVoiceEntry, checkVoiceEntry, registerVoiceRoom, type EntryCredential } from "@/lib/voice-entry.functions";
 import bunny from "@/assets/bunny.png";
@@ -89,6 +90,7 @@ function App() {
   const createEntry = useServerFn(createVoiceEntry);
   const openWalletFn = useServerFn(openWallet);
   const [coins, setCoins] = useState<{ promo: number; paid: number } | null>(null);
+  const [buyOpen, setBuyOpen] = useState(false);
   const checkEntry = useServerFn(checkVoiceEntry);
   const registerRoom = useServerFn(registerVoiceRoom);
   const sendReport = useServerFn(submitReport);
@@ -355,7 +357,8 @@ function App() {
         </div>
         <img src={vozoneLogo} alt="Vozone" width={1000} height={280} className="h-7 w-auto object-contain" />
         <div className="flex items-center gap-4 text-muted-foreground">
-          {coins && <span aria-label="Saldo de moedas" className="rounded-full bg-accent px-3 py-1 text-sm font-bold text-accent-foreground">🪙 {coins.promo + coins.paid}</span>}
+          {coins && <button type="button" onClick={() => setBuyOpen(true)} aria-label="Saldo de moedas" className="rounded-full bg-accent px-3 py-1 text-sm font-bold text-accent-foreground">🪙 {coins.promo + coins.paid} +</button>}
+          <BuyCoinsDialog open={buyOpen} onOpenChange={setBuyOpen} onBalance={setCoins} />
           <UserPlus size={24} /><Bell size={24} />
         </div>
       </header>

@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      coin_orders: {
+        Row: {
+          amount_cents: number
+          coins: number
+          created_at: string
+          id: string
+          livemode: boolean
+          package_id: string
+          paid_at: string | null
+          provider_payment_id: string | null
+          status: string
+          wallet_id: string
+        }
+        Insert: {
+          amount_cents: number
+          coins: number
+          created_at?: string
+          id?: string
+          livemode: boolean
+          package_id: string
+          paid_at?: string | null
+          provider_payment_id?: string | null
+          status?: string
+          wallet_id: string
+        }
+        Update: {
+          amount_cents?: number
+          coins?: number
+          created_at?: string
+          id?: string
+          livemode?: boolean
+          package_id?: string
+          paid_at?: string | null
+          provider_payment_id?: string | null
+          status?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coin_orders_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "voice_wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voice_entries: {
         Row: {
           created_at: string
@@ -142,6 +189,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      credit_coin_order: {
+        Args: {
+          p_amount_cents: number
+          p_livemode: boolean
+          p_payment_id: string
+        }
+        Returns: boolean
+      }
       register_voice_room: {
         Args: {
           p_entry: string
