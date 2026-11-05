@@ -10,7 +10,6 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { ConsentBanner } from "@/components/consent-banner";
-import { PaymentTestModeBanner } from "@/components/payment-test-mode-banner";
 import { loadGoogleAds } from "@/lib/consent";
 
 import appCss from "../styles.css?url";
@@ -130,7 +129,6 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <PaymentTestModeBanner />
       <Outlet />
       <ConsentBanner />
     </QueryClientProvider>

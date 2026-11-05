@@ -18,3 +18,4 @@
 - Optional ad scripts and conversion events are gated by explicit stored consent in src/lib/consent.ts; denied defaults apply worldwide because the app requires first-visit privacy choices in every region.
 - Built-in payments are test-only until go-live and confirmed payment-method availability; checkout must not substitute an unavailable required payment method, and coin fulfillment must be atomic, verified and environment-scoped.
 - Coin wallets are server-side rows keyed by a hashed browser wallet token kept separately from the per-entry identity, so balances survive re-entry while the browser never holds trusted balance data.
+- Pix coin purchases go through Asaas from server functions; the webhook checks a shared token header, re-reads the payment from Asaas, then credits via the atomic credit_coin_order RPC, because webhook bodies and browser state are never payment proof.
