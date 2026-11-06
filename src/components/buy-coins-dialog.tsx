@@ -51,7 +51,7 @@ export function BuyCoinsDialog({ open, onOpenChange, onBalance }: { open: boolea
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogTitle>Comprar créditos com Pix</DialogTitle>
-        <DialogDescription>Os créditos entram sozinhas assim que o Pix for confirmado.</DialogDescription>
+        <DialogDescription>Os créditos entram sozinhos assim que o Pix for confirmado.</DialogDescription>
         {done ? (
           <p role="status" className="text-center text-lg font-bold">Pagamento confirmado! +{charge?.coins} créditos 🪙</p>
         ) : charge ? (
