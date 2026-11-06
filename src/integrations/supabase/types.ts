@@ -206,6 +206,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      spend_search_coin: {
+        Args: { _token_hash: string }
+        Returns: {
+          ok: boolean
+          paid: number
+          promo: number
+        }[]
+      }
       submit_voice_report: {
         Args: {
           p_details: string
