@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/button";
 import { createPixCharge, getPixOrder } from "@/lib/pix.functions";
 
 const packs = [
-  { id: "coins_10", coins: 10, price: "R$ 1,00" },
-  { id: "coins_20", coins: 20, price: "R$ 2,00" },
-  { id: "coins_30", coins: 30, price: "R$ 3,00" },
   { id: "coins_50", coins: 50, price: "R$ 5,00" },
+  { id: "coins_100", coins: 100, price: "R$ 10,00" },
+  { id: "coins_200", coins: 200, price: "R$ 20,00" },
 ] as const;
 
 type Charge = { orderId: string; qrImage: string; copyPaste: string; coins: number };
@@ -16,7 +15,7 @@ type Charge = { orderId: string; qrImage: string; copyPaste: string; coins: numb
 export function BuyCoinsDialog({ open, onOpenChange, onBalance }: { open: boolean; onOpenChange: (o: boolean) => void; onBalance: (b: { promo: number; paid: number }) => void }) {
   const create = useServerFn(createPixCharge);
   const check = useServerFn(getPixOrder);
-  const [pack, setPack] = useState<(typeof packs)[number]["id"]>("coins_10");
+  const [pack, setPack] = useState<(typeof packs)[number]["id"]>("coins_50");
   const [cpf, setCpf] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -51,10 +50,10 @@ export function BuyCoinsDialog({ open, onOpenChange, onBalance }: { open: boolea
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
-        <DialogTitle>Comprar moedas com Pix</DialogTitle>
-        <DialogDescription>As moedas entram sozinhas assim que o Pix for confirmado.</DialogDescription>
+        <DialogTitle>Comprar créditos com Pix</DialogTitle>
+        <DialogDescription>As créditos entram sozinhas assim que o Pix for confirmado.</DialogDescription>
         {done ? (
-          <p role="status" className="text-center text-lg font-bold">Pagamento confirmado! +{charge?.coins} moedas 🪙</p>
+          <p role="status" className="text-center text-lg font-bold">Pagamento confirmado! +{charge?.coins} créditos 🪙</p>
         ) : charge ? (
           <div className="flex flex-col items-center gap-3">
             <img src={`data:image/png;base64,${charge.qrImage}`} alt="QR Code Pix" className="h-52 w-52 rounded-md bg-card" />

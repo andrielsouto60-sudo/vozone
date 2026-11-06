@@ -14,7 +14,7 @@ async function findWallet(token: string) {
 export const createPixCharge = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({
     token: walletToken,
-    packageId: z.enum(["coins_10", "coins_20", "coins_30", "coins_50"]),
+    packageId: z.enum(["coins_50", "coins_100", "coins_200"]),
     cpf: z.string().transform((s) => s.replace(/\D/g, "")).pipe(z.string().regex(/^(\d{11}|\d{14})$/, "CPF inválido")),
   }).parse(d))
   .handler(async ({ data }) => {
