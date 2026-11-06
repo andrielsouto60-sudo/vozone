@@ -30,3 +30,17 @@ export const openWallet = createServerFn({ method: "POST" })
     if (error) throw new Error("Não foi possível abrir sua carteira.");
     return { token, promo: WELCOME_BONUS, paid: 0, welcome: true };
   });
+
+/** Debits exactly 1 coin for a search the user started with a gender filter.
+ * "Todos" is free; promo coins are spent before purchased ones. */
+export const spendSearchCoin = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), gender: z.enum(["Todos", "Mulheres", "Homens"]) }).parse(d))
+  .handler(async ({ data }) => {
+    if (data.gender === "Todos") return { ok: true, charged: false, promo: null as number | null, paid: null as number | null };
+    const { hashEntryToken } = await import("./voice-entry.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin.rpc("spend_search_coin", { _token_hash: await hashEntryToken(data.token) });
+    if (error) throw new Error("Não foi possível usar seu crédito.");
+    const r = rows?.[0];
+    return { ok: !!r?.ok, charged: !!r?.ok, promo: r?.promo ?? 0, paid: r?.paid ?? 0 };
+  });

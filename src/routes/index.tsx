@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { freshEntry, genderOptions, genderLabel, genderSymbol, reportReasons, reportSchema, type OwnGender } from "@/lib/voice-preferences";
 import { submitReport } from "@/lib/reports.functions";
 import { BuyCoinsDialog } from "@/components/buy-coins-dialog";
-import { openWallet } from "@/lib/wallet.functions";
+import { openWallet, spendSearchCoin } from "@/lib/wallet.functions";
 import { createVoiceEntry, checkVoiceEntry, registerVoiceRoom, type EntryCredential } from "@/lib/voice-entry.functions";
 import bunny from "@/assets/bunny.png";
 import ghost from "@/assets/ghost.png";
@@ -89,6 +89,19 @@ function App() {
   const callAttempt = useRef(0);
   const createEntry = useServerFn(createVoiceEntry);
   const openWalletFn = useServerFn(openWallet);
+  const spendFn = useServerFn(spendSearchCoin);
+  /** Only called when THIS user clicks to search; never when the other side leaves. */
+  const payForSearch = async (): Promise<boolean> => {
+    if (gender === "Todos") return true;
+    const token = localStorage.getItem("vz_wallet");
+    if (!token) { setError("Sua carteira de créditos não foi encontrada. Entre novamente."); return false; }
+    try {
+      const r = await spendFn({ data: { token, gender } });
+      if (r.promo !== null && r.paid !== null) setCoins({ promo: r.promo, paid: r.paid });
+      if (!r.ok) { setError("Você não tem créditos para buscar com filtro de gênero. Compre créditos ou escolha \"Todos\" (grátis)."); setBuyOpen(true); return false; }
+      return true;
+    } catch { setError("Não foi possível usar seu crédito. Tente novamente."); return false; }
+  };
   const [coins, setCoins] = useState<{ promo: number; paid: number } | null>(null);
   const [buyOpen, setBuyOpen] = useState(false);
   const checkEntry = useServerFn(checkVoiceEntry);
@@ -189,6 +202,7 @@ function App() {
       if (!entry) return;
       const access = await checkEntry({ data: entry });
       if (access.state !== "active") { suspendRef.current(); return; }
+      if (!(await payForSearch())) return;
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
       const media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       if (!alive.current || credential.current !== entry) { media.getTracks().forEach((track) => track.stop()); return; }
@@ -212,15 +226,16 @@ function App() {
     setMuted(false); setPlaybackBlocked(false); setPartner(null); setStage("home");
   };
   const hangupRef = useRef(hangup); hangupRef.current = hangup;
-  const next = () => {
+  const next = async (userClicked: unknown = true) => {
     if (!partner) return;
     excluded.current.add(partner.id);
     hangup(true);
+    if (userClicked !== false && !(await payForSearch())) { stopMic(); return; }
     if (stream.current?.getAudioTracks().some((t) => t.readyState === "live")) setStage("busca");
     else setError("O microfone foi desconectado. Conecte-o e tente novamente.");
   };
   const nextRef = useRef(next); nextRef.current = next;
-  const requeueRef = useRef(() => { setNotice("A outra pessoa saiu. Procurando alguém novo..."); nextRef.current(); });
+  const requeueRef = useRef(() => { setNotice("A outra pessoa saiu. Procurando alguém novo..."); void nextRef.current(false); });
   const report = () => {
     if (!partner) return;
     const target = { person: partner, room: roomId.current };
