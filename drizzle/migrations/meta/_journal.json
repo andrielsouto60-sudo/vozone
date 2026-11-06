@@ -29,6 +29,13 @@
       "when": 1793854681614,
       "tag": "0003_coin_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793972792165,
+      "tag": "0004_spend_search_coin",
+      "breakpoints": true
     }
   ]
 }

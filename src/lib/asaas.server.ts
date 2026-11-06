@@ -1,9 +1,8 @@
 // Server-only Asaas client. The API key never reaches the browser.
 export const COIN_PACKAGES = {
-  coins_10: { coins: 10, cents: 100 },
-  coins_20: { coins: 20, cents: 200 },
-  coins_30: { coins: 30, cents: 300 },
   coins_50: { coins: 50, cents: 500 },
+  coins_100: { coins: 100, cents: 1000 },
+  coins_200: { coins: 200, cents: 2000 },
 } as const;
 export type PackageId = keyof typeof COIN_PACKAGES;
 
